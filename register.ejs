@@ -1,0 +1,30 @@
+<%- include('partials/header', { title: 'Inscription' }) %>
+
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">🌾</div>
+    <h1>Rejoindre l'équipe</h1>
+    <p class="auth-subtitle">Crée ton compte pour suivre les âmes que tu gagnes</p>
+
+    <% if (error) { %><p class="error"><%= error %></p><% } %>
+
+    <form method="POST" action="/inscription" class="stacked-form">
+      <label>Nom complet
+        <input type="text" name="name" required autofocus>
+      </label>
+      <label>Email
+        <input type="email" name="email" required>
+      </label>
+      <label>Mot de passe
+        <input type="password" name="password" required minlength="4">
+      </label>
+      <label>Église / groupe (optionnel)
+        <input type="text" name="church">
+      </label>
+      <button class="btn btn-primary" type="submit">Créer mon compte</button>
+    </form>
+    <p class="auth-switch">Déjà un compte ? <a href="/connexion">Se connecter</a></p>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

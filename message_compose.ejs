@@ -1,0 +1,48 @@
+<%- include('partials/header', { title: 'Message pour ' + soul.name }) %>
+
+<div class="page-head">
+  <h1>Écrire à <%= soul.name %></h1>
+</div>
+
+<div class="two-col">
+  <section class="panel">
+    <h2>Choisir un verset / message</h2>
+    <% Object.keys(VERSES).forEach(function(cat) { %>
+      <h3 class="cat-title">
+        <%= cat === 'encouragement' ? 'Encouragement' : cat === 'salut' ? "Message de salut" : cat === 'reconfort' ? 'Réconfort' : 'Force et foi' %>
+      </h3>
+      <div class="verse-list">
+        <% VERSES[cat].forEach(function(v, i) { %>
+          <button type="button" class="verse-pick"
+            data-ref="<%= v.ref %>"
+            data-text="<%= v.text.replace(/"/g, '&quot;') %>">
+            <strong><%= v.ref %></strong>
+            <span><%= v.text %></span>
+          </button>
+        <% }) %>
+      </div>
+    <% }) %>
+  </section>
+
+  <section class="panel">
+    <h2>Aperçu du message</h2>
+    <form method="POST" action="/ames/<%= soul.id %>/message" class="stacked-form">
+      <textarea id="content" name="content" rows="10" placeholder="Choisis un verset à gauche, ou écris ton propre message ici..."><%= "Bonjour " + soul.name + ",\n\n\n\nQue Dieu te bénisse,\n" + currentUser.name %></textarea>
+      <button class="btn btn-primary" type="submit">Valider et préparer l'envoi</button>
+    </form>
+  </section>
+</div>
+
+<script>
+  const textarea = document.getElementById('content');
+  document.querySelectorAll('.verse-pick').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const ref = btn.getAttribute('data-ref');
+      const text = btn.getAttribute('data-text');
+      textarea.value = "Bonjour <%= soul.name %>,\n\n\"" + text + "\"\n(" + ref + ")\n\nQue Dieu te bénisse,\n<%= currentUser.name %>";
+      textarea.focus();
+    });
+  });
+</script>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,40 @@
+<%- include('partials/header', { title: 'Message prêt' }) %>
+
+<div class="page-head">
+  <h1>Message prêt à envoyer ✅</h1>
+</div>
+
+<section class="panel">
+  <p class="muted">Le message a été enregistré dans l'historique de <%= soul.name %>. Il ne reste plus qu'à l'envoyer avec ton téléphone :</p>
+
+  <div class="message-preview-box"><%= content %></div>
+
+  <% if (!digitsPhone) { %>
+    <p class="error">Aucun numéro de téléphone enregistré pour cette âme. <a href="/ames/<%= soul.id %>/editer">Ajoute un numéro</a> pour pouvoir envoyer directement.</p>
+  <% } else { %>
+    <div class="send-actions">
+      <a class="btn btn-primary" href="sms:<%= digitsPhone %>?body=<%= encodeURIComponent(content) %>">📱 Ouvrir dans SMS</a>
+      <a class="btn btn-whatsapp" target="_blank" href="https://wa.me/<%= digitsPhone.replace('+','') %>?text=<%= encodeURIComponent(content) %>">💬 Ouvrir dans WhatsApp</a>
+      <button class="btn" type="button" onclick="copyMsg()">📋 Copier le message</button>
+    </div>
+  <% } %>
+
+  <textarea id="copy-source" style="position:absolute; left:-9999px;"><%= content %></textarea>
+
+  <div class="head-actions" style="margin-top:24px;">
+    <a class="btn" href="/ames/<%= soul.id %>">Retour à la fiche</a>
+  </div>
+</section>
+
+<script>
+  function copyMsg() {
+    const el = document.getElementById('copy-source');
+    el.style.position = 'static';
+    el.select();
+    document.execCommand('copy');
+    el.style.position = 'absolute';
+    alert('Message copié dans le presse-papier !');
+  }
+</script>
+
+<%- include('partials/footer') %>

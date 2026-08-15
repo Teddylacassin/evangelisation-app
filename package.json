@@ -1,0 +1,19 @@
+{
+  "name": "evangelisation-app",
+  "version": "1.0.0",
+  "description": "Application pour le suivi de l'evangelisation de rue - ames, messages, tableau de bord, priere",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "bcryptjs": "^2.4.3",
+    "connect-sqlite3": "^0.9.13",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0"
+  }
+}

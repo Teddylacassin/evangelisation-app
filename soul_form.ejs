@@ -1,0 +1,42 @@
+<%- include('partials/header', { title: soul ? 'Modifier une âme' : 'Nouvelle âme' }) %>
+
+<div class="page-head">
+  <h1><%= soul && soul.id ? 'Modifier ' + soul.name : 'Nouvelle âme rencontrée' %></h1>
+</div>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+
+<form method="POST" action="<%= soul && soul.id ? '/ames/' + soul.id : '/ames' %>" class="stacked-form panel">
+  <label>Nom complet *
+    <input type="text" name="name" required value="<%= soul ? soul.name || '' : '' %>" autofocus>
+  </label>
+  <label>Numéro de téléphone
+    <input type="tel" name="phone" placeholder="+33 6 12 34 56 78" value="<%= soul ? soul.phone || '' : '' %>">
+  </label>
+  <div class="form-row">
+    <label>Ville
+      <input type="text" name="city" value="<%= soul ? soul.city || '' : '' %>">
+    </label>
+    <label>Lieu de rencontre
+      <input type="text" name="location" placeholder="Marché, gare, rue..." value="<%= soul ? soul.location || '' : '' %>">
+    </label>
+  </div>
+  <div class="form-row">
+    <label>Date de rencontre
+      <input type="date" name="met_date" value="<%= soul && soul.met_date ? soul.met_date : new Date().toISOString().slice(0,10) %>">
+    </label>
+    <label>Statut
+      <select name="status">
+        <% Object.keys(STATUSES).forEach(function(s) { %>
+          <option value="<%= s %>" <%= soul && soul.status === s ? 'selected' : '' %>><%= STATUSES[s].label %></option>
+        <% }) %>
+      </select>
+    </label>
+  </div>
+  <label>Notes
+    <textarea name="notes" rows="4" placeholder="Contexte de la rencontre, besoins exprimés, prière faite ensemble..."><%= soul ? soul.notes || '' : '' %></textarea>
+  </label>
+  <button class="btn btn-primary" type="submit"><%= soul && soul.id ? 'Enregistrer les modifications' : 'Ajouter cette âme' %></button>
+</form>
+
+<%- include('partials/footer') %>

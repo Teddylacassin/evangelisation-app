@@ -1,0 +1,42 @@
+<%- include('partials/header', { title: 'Mes âmes' }) %>
+
+<div class="page-head">
+  <h1>Âmes suivies</h1>
+  <a href="/ames/nouvelle" class="btn btn-primary">+ Ajouter une âme</a>
+</div>
+
+<div class="toolbar">
+  <div class="tabs">
+    <a class="tab <%= viewScope === 'moi' ? 'active' : '' %>" href="/ames?scope=moi">Mes âmes</a>
+    <a class="tab <%= viewScope === 'equipe' ? 'active' : '' %>" href="/ames?scope=equipe">Toute l'équipe</a>
+  </div>
+  <form method="GET" action="/ames" class="search-form">
+    <input type="hidden" name="scope" value="<%= viewScope %>">
+    <input type="text" name="q" placeholder="Rechercher un nom..." value="<%= q %>">
+    <button class="btn btn-small" type="submit">Rechercher</button>
+  </form>
+</div>
+
+<% if (souls.length === 0) { %>
+  <p class="empty">Aucune âme enregistrée pour l'instant. Commence par en ajouter une !</p>
+<% } else { %>
+<div class="soul-cards">
+  <% souls.forEach(function(s) { %>
+    <a class="soul-card" href="/ames/<%= s.id %>">
+      <div class="soul-card-top">
+        <span class="status-pill" style="background:<%= STATUSES[s.status] ? STATUSES[s.status].color : '#999' %>">
+          <%= STATUSES[s.status] ? STATUSES[s.status].label : s.status %>
+        </span>
+      </div>
+      <div class="soul-card-name"><%= s.name %></div>
+      <div class="soul-card-meta">
+        <% if (s.city) { %><span>📍 <%= s.city %></span><% } %>
+        <% if (s.phone) { %><span>📞 <%= s.phone %></span><% } %>
+      </div>
+      <div class="soul-card-meta muted">Rencontrée le <%= s.met_date %><% if (viewScope === 'equipe') { %> par <%= s.owner_name %><% } %></div>
+    </a>
+  <% }) %>
+</div>
+<% } %>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,50 @@
+<%- include('partials/header', { title: soul.name }) %>
+
+<div class="page-head">
+  <h1><%= soul.name %></h1>
+  <div class="head-actions">
+    <a class="btn btn-primary" href="/ames/<%= soul.id %>/message">✉️ Envoyer un verset</a>
+    <a class="btn" href="/ames/<%= soul.id %>/editer">Modifier</a>
+  </div>
+</div>
+
+<section class="panel">
+  <span class="status-pill" style="background:<%= STATUSES[soul.status] ? STATUSES[soul.status].color : '#999' %>">
+    <%= STATUSES[soul.status] ? STATUSES[soul.status].label : soul.status %>
+  </span>
+  <div class="detail-grid">
+    <div><strong>Téléphone</strong><span><%= soul.phone || '—' %></span></div>
+    <div><strong>Ville</strong><span><%= soul.city || '—' %></span></div>
+    <div><strong>Lieu de rencontre</strong><span><%= soul.location || '—' %></span></div>
+    <div><strong>Date de rencontre</strong><span><%= soul.met_date %></span></div>
+    <div><strong>Dernier contact</strong><span><%= soul.last_contacted_at ? soul.last_contacted_at : 'Jamais recontacté(e)' %></span></div>
+  </div>
+  <% if (soul.notes) { %>
+    <div class="notes-block">
+      <strong>Notes</strong>
+      <p><%= soul.notes %></p>
+    </div>
+  <% } %>
+</section>
+
+<section class="panel">
+  <h2>Historique des messages envoyés</h2>
+  <% if (messages.length === 0) { %>
+    <p class="empty">Aucun message envoyé pour l'instant.</p>
+  <% } else { %>
+    <ul class="message-history">
+      <% messages.forEach(function(m) { %>
+        <li>
+          <div class="message-meta"><%= m.sent_at %> — par <%= m.user_name %></div>
+          <div class="message-content"><%= m.content %></div>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<form method="POST" action="/ames/<%= soul.id %>/supprimer" onsubmit="return confirm('Supprimer définitivement cette âme ?');">
+  <button class="btn btn-danger btn-small" type="submit">Supprimer cette fiche</button>
+</form>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,24 @@
+<%- include('partials/header', { title: 'Connexion' }) %>
+
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">🌾</div>
+    <h1>Semeurs</h1>
+    <p class="auth-subtitle">Suivi de l'évangélisation et des âmes gagnées</p>
+
+    <% if (error) { %><p class="error"><%= error %></p><% } %>
+
+    <form method="POST" action="/connexion" class="stacked-form">
+      <label>Email
+        <input type="email" name="email" required autofocus>
+      </label>
+      <label>Mot de passe
+        <input type="password" name="password" required>
+      </label>
+      <button class="btn btn-primary" type="submit">Se connecter</button>
+    </form>
+    <p class="auth-switch">Pas encore de compte ? <a href="/inscription">Créer un compte gagneur d'âmes</a></p>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

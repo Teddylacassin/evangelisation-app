@@ -1,0 +1,69 @@
+<%- include('partials/header', { title: 'Tableau de bord' }) %>
+
+<div class="page-head">
+  <h1>Bonjour <%= currentUser.name.split(' ')[0] %> 👋</h1>
+  <a href="/ames/nouvelle" class="btn btn-primary">+ Ajouter une âme rencontrée</a>
+</div>
+
+<section class="stat-grid">
+  <div class="stat-card highlight">
+    <div class="stat-value"><%= total %></div>
+    <div class="stat-label">Âmes gagnées au total</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value"><%= thisWeek %></div>
+    <div class="stat-label">Cette semaine</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value"><%= thisMonth %></div>
+    <div class="stat-label">Ces 30 derniers jours</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value"><%= teamTotal %></div>
+    <div class="stat-label">Âmes gagnées par toute l'équipe</div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Répartition par statut</h2>
+  <div class="status-bars">
+    <% Object.keys(STATUSES).forEach(function(s) { %>
+      <div class="status-row">
+        <span class="status-dot" style="background:<%= STATUSES[s].color %>"></span>
+        <span class="status-name"><%= STATUSES[s].label %></span>
+        <span class="status-count"><%= statusCounts[s] %></span>
+      </div>
+    <% }) %>
+  </div>
+</section>
+
+<div class="two-col">
+  <section class="panel">
+    <h2>À recontacter</h2>
+    <p class="muted">Âmes sans nouvelles depuis plus de 7 jours</p>
+    <% if (aRecontacter.length === 0) { %>
+      <p class="empty">Tu es à jour, rien à recontacter pour l'instant 🎉</p>
+    <% } else { %>
+      <ul class="soul-mini-list">
+        <% aRecontacter.forEach(function(s) { %>
+          <li>
+            <a href="/ames/<%= s.id %>"><%= s.name %></a>
+            <span class="muted"><%= s.city || '' %></span>
+            <a class="btn btn-small" href="/ames/<%= s.id %>/message">Envoyer un verset</a>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+
+  <section class="panel">
+    <h2>Classement de l'équipe</h2>
+    <ol class="ranking">
+      <% teamRanking.forEach(function(r) { %>
+        <li><span><%= r.name %></span><strong><%= r.c %></strong></li>
+      <% }) %>
+    </ol>
+  </section>
+</div>
+
+<%- include('partials/footer') %>

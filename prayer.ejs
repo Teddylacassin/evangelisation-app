@@ -1,0 +1,43 @@
+<%- include('partials/header', { title: 'Espace prière' }) %>
+
+<div class="page-head">
+  <h1>🙏 Espace prière</h1>
+</div>
+
+<section class="panel">
+  <h2>Partager un sujet de prière</h2>
+  <form method="POST" action="/priere" class="stacked-form">
+    <textarea name="content" rows="3" placeholder="Ex : Prions pour Marie rencontrée hier au marché, qu'elle ouvre son coeur..." required></textarea>
+    <button class="btn btn-primary" type="submit">Publier</button>
+  </form>
+</section>
+
+<section class="prayer-wall">
+  <% if (requests.length === 0) { %>
+    <p class="empty">Aucun sujet de prière pour l'instant. Sois le premier à en partager un !</p>
+  <% } %>
+  <% requests.forEach(function(r) { %>
+    <div class="prayer-card <%= r.answered ? 'answered' : '' %>">
+      <div class="prayer-meta">
+        <strong><%= r.user_name %></strong>
+        <span class="muted"><%= r.created_at %></span>
+        <% if (r.answered) { %><span class="badge-answered">Prière exaucée 🙌</span><% } %>
+      </div>
+      <p class="prayer-content"><%= r.content %></p>
+      <div class="prayer-actions">
+        <form method="POST" action="/priere/<%= r.id %>/soutenir">
+          <button class="btn btn-small <%= r.i_support ? 'btn-active' : '' %>" type="submit">
+            🙏 Je prie (<%= r.support_count %>)
+          </button>
+        </form>
+        <% if (r.user_id === currentUser.id) { %>
+          <form method="POST" action="/priere/<%= r.id %>/repondu">
+            <button class="btn btn-small" type="submit"><%= r.answered ? 'Marquer en attente' : 'Marquer comme exaucée' %></button>
+          </form>
+        <% } %>
+      </div>
+    </div>
+  <% }) %>
+</section>
+
+<%- include('partials/footer') %>

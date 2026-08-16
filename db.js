@@ -84,6 +84,28 @@ async function initDb() {
       changed_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (soul_id) REFERENCES souls(id) ON DELETE CASCADE,
       FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      report_date TEXT NOT NULL DEFAULT (date('now')),
+      location TEXT,
+      presence TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS report_people (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      notes TEXT,
+      evangelized INTEGER NOT NULL DEFAULT 0,
+      saved INTEGER NOT NULL DEFAULT 0,
+      phone TEXT,
+      invited_church INTEGER NOT NULL DEFAULT 0,
+      soul_id INTEGER,
+      FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+      FOREIGN KEY (soul_id) REFERENCES souls(id) ON DELETE SET NULL
     )`
   ], 'write');
 

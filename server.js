@@ -1,11 +1,14 @@
 require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const bcrypt = require('bcryptjs');
+const cron = require('node-cron');
 const { initDb, get, all, run, VERSES } = require('./db');
+const { sendEmail } = require('./mail');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -117,6 +120,66 @@ app.post('/deconnexion', (req, res) => {
   req.session.destroy(() => res.redirect('/connexion'));
 });
 
+// ---------- Mot de passe oublié ----------
+app.get('/mot-de-passe-oublie', (req, res) => {
+  if (req.session.user) return res.redirect('/dashboard');
+  res.render('forgot_password', { sent: false });
+});
+
+app.post('/mot-de-passe-oublie', h(async (req, res) => {
+  const email = (req.body.email || '').toLowerCase().trim();
+  const user = await get('SELECT * FROM users WHERE email = ?', [email]);
+  if (user) {
+    const token = crypto.randomBytes(32).toString('hex');
+    await run(
+      "UPDATE users SET reset_token = ?, reset_token_expires = datetime('now', '+1 hour') WHERE id = ?",
+      [token, user.id]
+    );
+    const resetUrl = `${req.protocol}://${req.get('host')}/reinitialiser/${token}`;
+    await sendEmail({
+      to: user.email,
+      subject: 'Réinitialisation de ton mot de passe — Semeurs',
+      html: `<p>Bonjour ${user.name},</p>
+             <p>Tu as demandé à réinitialiser ton mot de passe sur l'application Semeurs.</p>
+             <p><a href="${resetUrl}">Clique ici pour choisir un nouveau mot de passe</a> (lien valable 1 heure).</p>
+             <p>Si tu n'es pas à l'origine de cette demande, tu peux ignorer cet email.</p>`
+    });
+  }
+  // On affiche toujours le même message, qu'un compte existe avec cet email ou non,
+  // pour ne pas révéler quels emails sont inscrits.
+  res.render('forgot_password', { sent: true });
+}));
+
+app.get('/reinitialiser/:token', h(async (req, res) => {
+  const user = await get(
+    "SELECT * FROM users WHERE reset_token = ? AND reset_token_expires > datetime('now')",
+    [req.params.token]
+  );
+  res.render('reset_password', { valid: !!user, token: req.params.token, error: null, done: false });
+}));
+
+app.post('/reinitialiser/:token', h(async (req, res) => {
+  const user = await get(
+    "SELECT * FROM users WHERE reset_token = ? AND reset_token_expires > datetime('now')",
+    [req.params.token]
+  );
+  if (!user) {
+    return res.render('reset_password', { valid: false, token: req.params.token, error: null, done: false });
+  }
+  const { password } = req.body;
+  if (!password || password.length < 4) {
+    return res.render('reset_password', {
+      valid: true,
+      token: req.params.token,
+      error: 'Le mot de passe doit contenir au moins 4 caractères.',
+      done: false
+    });
+  }
+  const hash = bcrypt.hashSync(password, 10);
+  await run('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?', [hash, user.id]);
+  res.render('reset_password', { valid: true, token: req.params.token, error: null, done: true });
+}));
+
 // ---------- Tableau de bord ----------
 app.get('/dashboard', requireAuth, h(async (req, res) => {
   const uid = req.session.user.id;
@@ -152,7 +215,13 @@ app.get('/dashboard', requireAuth, h(async (req, res) => {
     ORDER BY a.created_at DESC LIMIT 5
   `, []);
 
-  res.render('dashboard', { total, statusCounts, thisWeek, thisMonth, aRecontacter, teamTotal, teamRanking, announcements });
+  const prayerSupportCount = (await get(`
+    SELECT COUNT(*) c FROM prayer_supports ps
+    JOIN prayer_requests p ON p.id = ps.prayer_id
+    WHERE p.user_id = ?
+  `, [uid])).c;
+
+  res.render('dashboard', { total, statusCounts, thisWeek, thisMonth, aRecontacter, teamTotal, teamRanking, announcements, prayerSupportCount });
 }));
 
 // ---------- Administration (annonces a l'equipe) ----------
@@ -200,13 +269,60 @@ app.get('/ames', requireAuth, h(async (req, res) => {
   res.render('souls_list', { souls, viewScope, q });
 }));
 
+app.get('/ames/export.csv', requireAuth, h(async (req, res) => {
+  const uid = req.session.user.id;
+  const viewScope = req.query.scope === 'equipe' ? 'equipe' : 'moi';
+  let souls;
+  if (viewScope === 'equipe') {
+    souls = await all(`SELECT s.*, u.name as owner_name FROM souls s JOIN users u ON u.id = s.created_by ORDER BY s.created_at DESC`, []);
+  } else {
+    souls = await all(`SELECT * FROM souls WHERE created_by = ? ORDER BY created_at DESC`, [uid]);
+  }
+  const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const headers = ['Nom', 'Téléphone', 'Ville', 'Lieu', 'Statut', 'Date de rencontre', 'Dernier contact', 'Notes'];
+  if (viewScope === 'equipe') headers.push('Gagnée par');
+  const lines = [headers.map(esc).join(',')];
+  souls.forEach((s) => {
+    const row = [
+      s.name,
+      s.phone,
+      s.city,
+      s.location,
+      STATUSES[s.status] ? STATUSES[s.status].label : s.status,
+      s.met_date,
+      s.last_contacted_at,
+      s.notes
+    ];
+    if (viewScope === 'equipe') row.push(s.owner_name);
+    lines.push(row.map(esc).join(','));
+  });
+  const csv = '\uFEFF' + lines.join('\r\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="ames-${viewScope}.csv"`);
+  res.send(csv);
+}));
+
 app.get('/ames/nouvelle', requireAuth, (req, res) => {
-  res.render('soul_form', { soul: null, error: null });
+  res.render('soul_form', { soul: null, error: null, duplicate: null });
 });
 
 app.post('/ames', requireAuth, h(async (req, res) => {
-  const { name, phone, city, location, status, notes, met_date } = req.body;
-  if (!name) return res.render('soul_form', { soul: req.body, error: "Le nom est obligatoire." });
+  const { name, phone, city, location, status, notes, met_date, confirm_duplicate } = req.body;
+  if (!name) return res.render('soul_form', { soul: req.body, error: "Le nom est obligatoire.", duplicate: null });
+
+  if (phone && !confirm_duplicate) {
+    const digits = phone.replace(/[^\d]/g, '');
+    if (digits.length >= 6) {
+      const candidates = await all(`
+        SELECT s.*, u.name as owner_name FROM souls s JOIN users u ON u.id = s.created_by WHERE s.phone IS NOT NULL
+      `, []);
+      const existing = candidates.find((c) => (c.phone || '').replace(/[^\d]/g, '') === digits);
+      if (existing) {
+        return res.render('soul_form', { soul: req.body, error: null, duplicate: existing });
+      }
+    }
+  }
+
   await run(
     `INSERT INTO souls (name, phone, city, location, status, notes, met_date, created_by)
     VALUES (?, ?, ?, ?, ?, ?, COALESCE(NULLIF(?, ''), date('now')), ?)`,
@@ -219,21 +335,29 @@ app.get('/ames/:id', requireAuth, h(async (req, res) => {
   const soul = await get('SELECT * FROM souls WHERE id = ?', [req.params.id]);
   if (!soul) return res.status(404).send('Âme introuvable.');
   const messages = await all(`SELECT m.*, u.name as user_name FROM message_log m JOIN users u ON u.id = m.user_id WHERE soul_id = ? ORDER BY sent_at DESC`, [soul.id]);
-  res.render('soul_detail', { soul, messages });
+  const history = await all(`SELECT h.*, u.name as user_name FROM soul_status_history h JOIN users u ON u.id = h.changed_by WHERE soul_id = ? ORDER BY changed_at DESC`, [soul.id]);
+  res.render('soul_detail', { soul, messages, history });
 }));
 
 app.get('/ames/:id/editer', requireAuth, h(async (req, res) => {
   const soul = await get('SELECT * FROM souls WHERE id = ?', [req.params.id]);
   if (!soul) return res.status(404).send('Âme introuvable.');
-  res.render('soul_form', { soul, error: null });
+  res.render('soul_form', { soul, error: null, duplicate: null });
 }));
 
 app.post('/ames/:id', requireAuth, h(async (req, res) => {
   const { name, phone, city, location, status, notes, met_date } = req.body;
+  const before = await get('SELECT status FROM souls WHERE id = ?', [req.params.id]);
   await run(
     `UPDATE souls SET name=?, phone=?, city=?, location=?, status=?, notes=?, met_date=? WHERE id=?`,
     [name.trim(), phone || null, city || null, location || null, status, notes || null, met_date, req.params.id]
   );
+  if (before && before.status !== status) {
+    await run(
+      'INSERT INTO soul_status_history (soul_id, old_status, new_status, changed_by) VALUES (?, ?, ?, ?)',
+      [req.params.id, before.status, status, req.session.user.id]
+    );
+  }
   res.redirect('/ames/' + req.params.id);
 }));
 
@@ -302,6 +426,38 @@ app.post('/priere/:id/repondu', requireAuth, h(async (req, res) => {
   }
   res.redirect('/priere');
 }));
+
+// ---------- Rappel hebdomadaire par email ----------
+// Chaque lundi a 8h (heure de Bruxelles), on envoie a chaque gagneur d'ame la liste
+// des personnes qu'il n'a pas recontactees depuis plus de 7 jours. Si RESEND_API_KEY
+// n'est pas configure sur Render, sendEmail() se contente de logger sans planter.
+cron.schedule('0 8 * * 1', async () => {
+  try {
+    const users = await all('SELECT * FROM users', []);
+    for (const u of users) {
+      const pending = await all(`
+        SELECT * FROM souls
+        WHERE created_by = ?
+          AND status != 'integree'
+          AND (last_contacted_at IS NULL OR last_contacted_at < datetime('now','-7 days'))
+        ORDER BY met_date ASC
+      `, [u.id]);
+      if (pending.length === 0) continue;
+      const list = pending.map((s) => `<li>${s.name}${s.city ? ' — ' + s.city : ''}</li>`).join('');
+      await sendEmail({
+        to: u.email,
+        subject: `${pending.length} âme(s) à recontacter cette semaine`,
+        html: `<p>Bonjour ${u.name},</p>
+               <p>Voici les âmes que tu n'as pas recontactées depuis plus de 7 jours :</p>
+               <ul>${list}</ul>
+               <p>Rendez-vous sur ton tableau de bord pour leur envoyer un mot d'encouragement 🙏</p>`
+      });
+    }
+    console.log('Rappels hebdomadaires envoyés.');
+  } catch (err) {
+    console.error('Erreur envoi des rappels hebdomadaires :', err);
+  }
+}, { timezone: 'Europe/Brussels' });
 
 // ---------- Demarrage ----------
 initDb()

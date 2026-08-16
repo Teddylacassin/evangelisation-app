@@ -5,6 +5,20 @@
   <a href="/ames/nouvelle" class="btn btn-primary">+ Ajouter une âme rencontrée</a>
 </div>
 
+<% if (announcements.length > 0) { %>
+  <section class="announcement-banner">
+    <% announcements.forEach(function(a) { %>
+      <div class="announcement-item">
+        <span class="announcement-icon">📣</span>
+        <div>
+          <p class="announcement-content"><%= a.content %></p>
+          <span class="announcement-meta"><%= a.author_name %> — <%= a.created_at %></span>
+        </div>
+      </div>
+    <% }) %>
+  </section>
+<% } %>
+
 <section class="stat-grid">
   <div class="stat-card highlight">
     <div class="stat-value"><%= total %></div>

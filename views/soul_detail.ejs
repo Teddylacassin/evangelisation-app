@@ -27,6 +27,24 @@
   <% } %>
 </section>
 
+<% if (history.length > 0) { %>
+<section class="panel">
+  <h2>Historique des statuts</h2>
+  <ul class="message-history">
+    <% history.forEach(function(hEntry) { %>
+      <li>
+        <div class="message-meta"><%= hEntry.changed_at %> — par <%= hEntry.user_name %></div>
+        <div class="message-content">
+          <%= hEntry.old_status && STATUSES[hEntry.old_status] ? STATUSES[hEntry.old_status].label : (hEntry.old_status || '—') %>
+          →
+          <strong><%= STATUSES[hEntry.new_status] ? STATUSES[hEntry.new_status].label : hEntry.new_status %></strong>
+        </div>
+      </li>
+    <% }) %>
+  </ul>
+</section>
+<% } %>
+
 <section class="panel">
   <h2>Historique des messages envoyés</h2>
   <% if (messages.length === 0) { %>

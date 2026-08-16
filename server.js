@@ -1,310 +1,123 @@
-require('dotenv').config();
+const { createClient } = require('@libsql/client');
 const path = require('path');
-const express = require('express');
-const session = require('express-session');
-const SQLiteStore = require('connect-sqlite3')(session);
-const bcrypt = require('bcryptjs');
-const { initDb, get, all, run, VERSES } = require('./db');
+const fs = require('fs');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+// En production (Render) : TURSO_DATABASE_URL et TURSO_AUTH_TOKEN sont definis
+// dans les variables d'environnement (base de donnees Turso, gratuite et persistante).
+// En local (developpement) : si ces variables sont absentes, on utilise un fichier
+// SQLite local pour pouvoir tester sans compte Turso.
+if (!process.env.TURSO_DATABASE_URL) {
+  const dataDir = path.join(__dirname, 'data');
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+}
 
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+const db = createClient(
+  process.env.TURSO_DATABASE_URL
+    ? { url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN }
+    : { url: 'file:./data/evangelisation.db' }
+);
 
-app.use(session({
-  store: new SQLiteStore({ db: 'sessions.db', dir: path.join(__dirname, 'data') }),
-  secret: process.env.SESSION_SECRET || 'change-moi-en-production-evangelisation',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { maxAge: 1000 * 60 * 60 * 24 * 30 } // 30 jours
-}));
+async function initDb() {
+  await db.batch([
+    `CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      church TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS souls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT,
+      city TEXT,
+      location TEXT,
+      status TEXT NOT NULL DEFAULT 'nouvelle_ame',
+      notes TEXT,
+      met_date TEXT NOT NULL DEFAULT (date('now')),
+      created_by INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_contacted_at TEXT,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS message_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      soul_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'sms',
+      sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (soul_id) REFERENCES souls(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS prayer_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      answered INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS prayer_supports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      prayer_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(prayer_id, user_id),
+      FOREIGN KEY (prayer_id) REFERENCES prayer_requests(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS announcements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  ], 'write');
+}
 
-const STATUSES = {
-  nouvelle_ame: { label: "Nouvelle âme rencontrée", color: "#f59e0b" },
-  en_suivi: { label: "En suivi", color: "#3b82f6" },
-  affermie: { label: "Affermie dans la foi", color: "#8b5cf6" },
-  integree: { label: "Intégrée dans une église", color: "#10b981" },
-  injoignable: { label: "Injoignable", color: "#6b7280" }
+// Petits helpers pour ecrire des requetes proches du style precedent (better-sqlite3)
+// mais version asynchrone (Turso/libsql fonctionne par promesses).
+async function get(sql, args = []) {
+  const rs = await db.execute({ sql, args });
+  return rs.rows[0] || null;
+}
+async function all(sql, args = []) {
+  const rs = await db.execute({ sql, args });
+  return rs.rows;
+}
+async function run(sql, args = []) {
+  const rs = await db.execute({ sql, args });
+  return { lastInsertRowid: rs.lastInsertRowid, changes: rs.rowsAffected };
+}
+
+// --- Bibliotheque de versets / messages, integree en dur (pas besoin de table) ---
+const VERSES = {
+  encouragement: [
+    { ref: "Jérémie 29:11", text: "Car je connais les projets que j'ai formés sur vous, dit l'Éternel, projets de paix et non de malheur, afin de vous donner un avenir et de l'espérance." },
+    { ref: "Ésaïe 41:10", text: "Ne crains rien, car je suis avec toi ; ne prends pas d'inquiétude, car je suis ton Dieu ; je te fortifie, je viens à ton secours." },
+    { ref: "Philippiens 4:13", text: "Je puis tout par celui qui me fortifie." },
+    { ref: "Psaume 34:19", text: "L'Éternel est près de ceux qui ont le coeur brisé, et il sauve ceux qui ont l'esprit dans l'abattement." },
+    { ref: "Romains 8:28", text: "Toutes choses concourent au bien de ceux qui aiment Dieu." }
+  ],
+  salut: [
+    { ref: "Jean 3:16", text: "Car Dieu a tant aimé le monde qu'il a donné son Fils unique, afin que quiconque croit en lui ne périsse point, mais qu'il ait la vie éternelle." },
+    { ref: "Romains 10:9", text: "Si tu confesses de ta bouche le Seigneur Jésus, et si tu crois dans ton coeur que Dieu l'a ressuscité des morts, tu seras sauvé." },
+    { ref: "Actes 16:31", text: "Crois au Seigneur Jésus, et tu seras sauvé, toi et ta famille." },
+    { ref: "Éphésiens 2:8-9", text: "C'est par la grâce que vous êtes sauvés, par le moyen de la foi. Et cela ne vient pas de vous, c'est le don de Dieu." }
+  ],
+  reconfort: [
+    { ref: "Psaume 23:1-4", text: "L'Éternel est mon berger : je ne manquerai de rien. Quand je marche dans la vallée de l'ombre de la mort, je ne crains aucun mal, car tu es avec moi." },
+    { ref: "Matthieu 11:28", text: "Venez à moi, vous tous qui êtes fatigués et chargés, et je vous donnerai du repos." },
+    { ref: "2 Corinthiens 1:3-4", text: "Le Dieu de toute consolation, qui nous console dans toutes nos afflictions." }
+  ],
+  force_et_foi: [
+    { ref: "Josué 1:9", text: "Fortifie-toi et prends courage, ne t'effraie point et ne t'épouvante point, car l'Éternel, ton Dieu, est avec toi partout où tu iras." },
+    { ref: "Hébreux 11:1", text: "La foi est une ferme assurance des choses qu'on espère, une démonstration de celles qu'on ne voit pas." },
+    { ref: "Marc 9:23", text: "Tout est possible à celui qui croit." }
+  ]
 };
 
-// Liste des administrateurs : reglable sur Render (Environment > ADMIN_EMAILS),
-// emails separes par des virgules, ex: "moi@exemple.com,autre@exemple.com"
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'teddylacassin@hotmail.com')
-  .split(',')
-  .map(e => e.trim().toLowerCase())
-  .filter(Boolean);
-
-function isAdminEmail(email) {
-  return !!email && ADMIN_EMAILS.includes(email.toLowerCase());
-}
-
-app.use((req, res, next) => {
-  res.locals.currentUser = req.session.user || null;
-  res.locals.STATUSES = STATUSES;
-  res.locals.isAdmin = req.session.user ? isAdminEmail(req.session.user.email) : false;
-  next();
-});
-
-function requireAuth(req, res, next) {
-  if (!req.session.user) return res.redirect('/connexion');
-  next();
-}
-
-function requireAdmin(req, res, next) {
-  if (!req.session.user) return res.redirect('/connexion');
-  if (!isAdminEmail(req.session.user.email)) return res.status(403).send('Accès réservé aux administrateurs.');
-  next();
-}
-
-// Petit wrapper pour eviter d'ecrire try/catch dans chaque route asynchrone
-const h = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-
-// ---------- Accueil ----------
-app.get('/', (req, res) => {
-  res.redirect(req.session.user ? '/dashboard' : '/connexion');
-});
-
-// ---------- Authentification ----------
-app.get('/inscription', (req, res) => {
-  if (req.session.user) return res.redirect('/dashboard');
-  res.render('register', { error: null });
-});
-
-app.post('/inscription', h(async (req, res) => {
-  const { name, email, password, church } = req.body;
-  if (!name || !email || !password) {
-    return res.render('register', { error: "Merci de remplir tous les champs obligatoires." });
-  }
-  const existing = await get('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
-  if (existing) {
-    return res.render('register', { error: "Un compte existe déjà avec cet email." });
-  }
-  const hash = bcrypt.hashSync(password, 10);
-  const info = await run(
-    'INSERT INTO users (name, email, password_hash, church) VALUES (?, ?, ?, ?)',
-    [name.trim(), email.toLowerCase().trim(), hash, church ? church.trim() : null]
-  );
-  const user = await get('SELECT id, name, email, church FROM users WHERE id = ?', [info.lastInsertRowid]);
-  req.session.user = user;
-  res.redirect('/dashboard');
-}));
-
-app.get('/connexion', (req, res) => {
-  if (req.session.user) return res.redirect('/dashboard');
-  res.render('login', { error: null });
-});
-
-app.post('/connexion', h(async (req, res) => {
-  const { email, password } = req.body;
-  const row = await get('SELECT * FROM users WHERE email = ?', [(email || '').toLowerCase().trim()]);
-  if (!row || !bcrypt.compareSync(password || '', row.password_hash)) {
-    return res.render('login', { error: "Email ou mot de passe incorrect." });
-  }
-  req.session.user = { id: row.id, name: row.name, email: row.email, church: row.church };
-  res.redirect('/dashboard');
-}));
-
-app.post('/deconnexion', (req, res) => {
-  req.session.destroy(() => res.redirect('/connexion'));
-});
-
-// ---------- Tableau de bord ----------
-app.get('/dashboard', requireAuth, h(async (req, res) => {
-  const uid = req.session.user.id;
-
-  const total = (await get('SELECT COUNT(*) c FROM souls WHERE created_by = ?', [uid])).c;
-  const byStatus = await all('SELECT status, COUNT(*) c FROM souls WHERE created_by = ? GROUP BY status', [uid]);
-  const statusCounts = {};
-  Object.keys(STATUSES).forEach(s => statusCounts[s] = 0);
-  byStatus.forEach(r => statusCounts[r.status] = r.c);
-
-  const thisWeek = (await get(`SELECT COUNT(*) c FROM souls WHERE created_by = ? AND met_date >= date('now','-7 days')`, [uid])).c;
-  const thisMonth = (await get(`SELECT COUNT(*) c FROM souls WHERE created_by = ? AND met_date >= date('now','-30 days')`, [uid])).c;
-
-  const aRecontacter = await all(`
-    SELECT * FROM souls
-    WHERE created_by = ?
-      AND status != 'integree'
-      AND (last_contacted_at IS NULL OR last_contacted_at < datetime('now','-7 days'))
-    ORDER BY met_date ASC
-    LIMIT 10
-  `, [uid]);
-
-  const teamTotal = (await get('SELECT COUNT(*) c FROM souls', [])).c;
-  const teamRanking = await all(`
-    SELECT u.name, COUNT(s.id) c
-    FROM users u LEFT JOIN souls s ON s.created_by = u.id
-    GROUP BY u.id ORDER BY c DESC LIMIT 10
-  `, []);
-
-  const announcements = await all(`
-    SELECT a.*, u.name as author_name FROM announcements a
-    JOIN users u ON u.id = a.user_id
-    ORDER BY a.created_at DESC LIMIT 5
-  `, []);
-
-  res.render('dashboard', { total, statusCounts, thisWeek, thisMonth, aRecontacter, teamTotal, teamRanking, announcements });
-}));
-
-// ---------- Administration (annonces a l'equipe) ----------
-app.get('/admin', requireAdmin, h(async (req, res) => {
-  const announcements = await all(`
-    SELECT a.*, u.name as author_name FROM announcements a
-    JOIN users u ON u.id = a.user_id
-    ORDER BY a.created_at DESC
-  `, []);
-  res.render('admin', { announcements });
-}));
-
-app.post('/admin/annonces', requireAdmin, h(async (req, res) => {
-  const { content } = req.body;
-  if (content && content.trim()) {
-    await run('INSERT INTO announcements (user_id, content) VALUES (?, ?)', [req.session.user.id, content.trim()]);
-  }
-  res.redirect('/admin');
-}));
-
-app.post('/admin/annonces/:id/supprimer', requireAdmin, h(async (req, res) => {
-  await run('DELETE FROM announcements WHERE id = ?', [req.params.id]);
-  res.redirect('/admin');
-}));
-
-// ---------- Ames ----------
-app.get('/ames', requireAuth, h(async (req, res) => {
-  const uid = req.session.user.id;
-  const viewScope = req.query.scope === 'equipe' ? 'equipe' : 'moi';
-  const q = (req.query.q || '').trim();
-  let souls;
-  if (viewScope === 'equipe') {
-    if (q) {
-      souls = await all(`SELECT s.*, u.name as owner_name FROM souls s JOIN users u ON u.id = s.created_by WHERE s.name LIKE ? ORDER BY s.created_at DESC`, [`%${q}%`]);
-    } else {
-      souls = await all(`SELECT s.*, u.name as owner_name FROM souls s JOIN users u ON u.id = s.created_by ORDER BY s.created_at DESC`, []);
-    }
-  } else {
-    if (q) {
-      souls = await all(`SELECT * FROM souls WHERE created_by = ? AND name LIKE ? ORDER BY created_at DESC`, [uid, `%${q}%`]);
-    } else {
-      souls = await all(`SELECT * FROM souls WHERE created_by = ? ORDER BY created_at DESC`, [uid]);
-    }
-  }
-  res.render('souls_list', { souls, viewScope, q });
-}));
-
-app.get('/ames/nouvelle', requireAuth, (req, res) => {
-  res.render('soul_form', { soul: null, error: null });
-});
-
-app.post('/ames', requireAuth, h(async (req, res) => {
-  const { name, phone, city, location, status, notes, met_date } = req.body;
-  if (!name) return res.render('soul_form', { soul: req.body, error: "Le nom est obligatoire." });
-  await run(
-    `INSERT INTO souls (name, phone, city, location, status, notes, met_date, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, COALESCE(NULLIF(?, ''), date('now')), ?)`,
-    [name.trim(), phone || null, city || null, location || null, status || 'nouvelle_ame', notes || null, met_date, req.session.user.id]
-  );
-  res.redirect('/ames');
-}));
-
-app.get('/ames/:id', requireAuth, h(async (req, res) => {
-  const soul = await get('SELECT * FROM souls WHERE id = ?', [req.params.id]);
-  if (!soul) return res.status(404).send('Âme introuvable.');
-  const messages = await all(`SELECT m.*, u.name as user_name FROM message_log m JOIN users u ON u.id = m.user_id WHERE soul_id = ? ORDER BY sent_at DESC`, [soul.id]);
-  res.render('soul_detail', { soul, messages });
-}));
-
-app.get('/ames/:id/editer', requireAuth, h(async (req, res) => {
-  const soul = await get('SELECT * FROM souls WHERE id = ?', [req.params.id]);
-  if (!soul) return res.status(404).send('Âme introuvable.');
-  res.render('soul_form', { soul, error: null });
-}));
-
-app.post('/ames/:id', requireAuth, h(async (req, res) => {
-  const { name, phone, city, location, status, notes, met_date } = req.body;
-  await run(
-    `UPDATE souls SET name=?, phone=?, city=?, location=?, status=?, notes=?, met_date=? WHERE id=?`,
-    [name.trim(), phone || null, city || null, location || null, status, notes || null, met_date, req.params.id]
-  );
-  res.redirect('/ames/' + req.params.id);
-}));
-
-app.post('/ames/:id/supprimer', requireAuth, h(async (req, res) => {
-  await run('DELETE FROM souls WHERE id = ?', [req.params.id]);
-  res.redirect('/ames');
-}));
-
-// ---------- Messagerie (versets / encouragement) ----------
-app.get('/ames/:id/message', requireAuth, h(async (req, res) => {
-  const soul = await get('SELECT * FROM souls WHERE id = ?', [req.params.id]);
-  if (!soul) return res.status(404).send('Âme introuvable.');
-  res.render('message_compose', { soul, VERSES });
-}));
-
-app.post('/ames/:id/message', requireAuth, h(async (req, res) => {
-  const soul = await get('SELECT * FROM souls WHERE id = ?', [req.params.id]);
-  if (!soul) return res.status(404).send('Âme introuvable.');
-  const { content } = req.body;
-  if (!content || !content.trim()) return res.redirect('/ames/' + soul.id + '/message');
-
-  await run('INSERT INTO message_log (soul_id, user_id, content) VALUES (?, ?, ?)', [soul.id, req.session.user.id, content.trim()]);
-  await run(`UPDATE souls SET last_contacted_at = datetime('now') WHERE id = ?`, [soul.id]);
-
-  const digitsPhone = (soul.phone || '').replace(/[^\d+]/g, '');
-  res.render('message_preview', { soul, content: content.trim(), digitsPhone });
-}));
-
-// ---------- Espace prière ----------
-app.get('/priere', requireAuth, h(async (req, res) => {
-  const uid = req.session.user.id;
-  const requests = await all(`
-    SELECT p.*, u.name as user_name,
-      (SELECT COUNT(*) FROM prayer_supports ps WHERE ps.prayer_id = p.id) as support_count,
-      (SELECT COUNT(*) FROM prayer_supports ps WHERE ps.prayer_id = p.id AND ps.user_id = ?) as i_support
-    FROM prayer_requests p JOIN users u ON u.id = p.user_id
-    ORDER BY p.answered ASC, p.created_at DESC
-  `, [uid]);
-  res.render('prayer', { requests });
-}));
-
-app.post('/priere', requireAuth, h(async (req, res) => {
-  const { content } = req.body;
-  if (content && content.trim()) {
-    await run('INSERT INTO prayer_requests (user_id, content) VALUES (?, ?)', [req.session.user.id, content.trim()]);
-  }
-  res.redirect('/priere');
-}));
-
-app.post('/priere/:id/soutenir', requireAuth, h(async (req, res) => {
-  const uid = req.session.user.id;
-  const pid = req.params.id;
-  const existing = await get('SELECT id FROM prayer_supports WHERE prayer_id = ? AND user_id = ?', [pid, uid]);
-  if (existing) {
-    await run('DELETE FROM prayer_supports WHERE id = ?', [existing.id]);
-  } else {
-    await run('INSERT INTO prayer_supports (prayer_id, user_id) VALUES (?, ?)', [pid, uid]);
-  }
-  res.redirect('/priere');
-}));
-
-app.post('/priere/:id/repondu', requireAuth, h(async (req, res) => {
-  const p = await get('SELECT * FROM prayer_requests WHERE id = ?', [req.params.id]);
-  if (p && p.user_id === req.session.user.id) {
-    await run('UPDATE prayer_requests SET answered = NOT answered WHERE id = ?', [p.id]);
-  }
-  res.redirect('/priere');
-}));
-
-// ---------- Demarrage ----------
-initDb()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Application d'évangélisation lancée sur http://localhost:${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('Erreur au demarrage (initialisation base de donnees) :', err);
-    process.exit(1);
-  });
+module.exports = { db, initDb, get, all, run, VERSES };

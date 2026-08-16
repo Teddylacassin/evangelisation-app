@@ -1,9 +1,16 @@
 const { createClient } = require('@libsql/client');
+const path = require('path');
+const fs = require('fs');
 
 // En production (Render) : TURSO_DATABASE_URL et TURSO_AUTH_TOKEN sont definis
 // dans les variables d'environnement (base de donnees Turso, gratuite et persistante).
 // En local (developpement) : si ces variables sont absentes, on utilise un fichier
 // SQLite local pour pouvoir tester sans compte Turso.
+if (!process.env.TURSO_DATABASE_URL) {
+  const dataDir = path.join(__dirname, 'data');
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+}
+
 const db = createClient(
   process.env.TURSO_DATABASE_URL
     ? { url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN }

@@ -1,0 +1,13 @@
+{
+  "name": "Semeurs — Évangélisation",
+  "short_name": "Semeurs",
+  "description": "Suivi de l'évangélisation, des âmes rencontrées et de la prière d'équipe",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f7f5ef",
+  "theme_color": "#2f6b4f",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

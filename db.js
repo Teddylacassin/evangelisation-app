@@ -1,77 +1,90 @@
-const path = require('path');
-const fs = require('fs');
-const Database = require('better-sqlite3');
+const { createClient } = require('@libsql/client');
 
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-
-const db = new Database(path.join(dataDir, 'evangelisation.db'));
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  church TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+// En production (Render) : TURSO_DATABASE_URL et TURSO_AUTH_TOKEN sont definis
+// dans les variables d'environnement (base de donnees Turso, gratuite et persistante).
+// En local (developpement) : si ces variables sont absentes, on utilise un fichier
+// SQLite local pour pouvoir tester sans compte Turso.
+const db = createClient(
+  process.env.TURSO_DATABASE_URL
+    ? { url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN }
+    : { url: 'file:./data/evangelisation.db' }
 );
 
-CREATE TABLE IF NOT EXISTS souls (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  phone TEXT,
-  city TEXT,
-  location TEXT,
-  status TEXT NOT NULL DEFAULT 'nouvelle_ame',
-  notes TEXT,
-  met_date TEXT NOT NULL DEFAULT (date('now')),
-  created_by INTEGER NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  last_contacted_at TEXT,
-  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
-);
+async function initDb() {
+  await db.batch([
+    `CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      church TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS souls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT,
+      city TEXT,
+      location TEXT,
+      status TEXT NOT NULL DEFAULT 'nouvelle_ame',
+      notes TEXT,
+      met_date TEXT NOT NULL DEFAULT (date('now')),
+      created_by INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_contacted_at TEXT,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS message_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      soul_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'sms',
+      sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (soul_id) REFERENCES souls(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS prayer_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      answered INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS prayer_supports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      prayer_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(prayer_id, user_id),
+      FOREIGN KEY (prayer_id) REFERENCES prayer_requests(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS announcements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  ], 'write');
+}
 
-CREATE TABLE IF NOT EXISTS message_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  soul_id INTEGER NOT NULL,
-  user_id INTEGER NOT NULL,
-  content TEXT NOT NULL,
-  channel TEXT NOT NULL DEFAULT 'sms',
-  sent_at TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY (soul_id) REFERENCES souls(id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS prayer_requests (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
-  content TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  answered INTEGER NOT NULL DEFAULT 0,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS prayer_supports (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  prayer_id INTEGER NOT NULL,
-  user_id INTEGER NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(prayer_id, user_id),
-  FOREIGN KEY (prayer_id) REFERENCES prayer_requests(id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS announcements (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
-  content TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-`);
+// Petits helpers pour ecrire des requetes proches du style precedent (better-sqlite3)
+// mais version asynchrone (Turso/libsql fonctionne par promesses).
+async function get(sql, args = []) {
+  const rs = await db.execute({ sql, args });
+  return rs.rows[0] || null;
+}
+async function all(sql, args = []) {
+  const rs = await db.execute({ sql, args });
+  return rs.rows;
+}
+async function run(sql, args = []) {
+  const rs = await db.execute({ sql, args });
+  return { lastInsertRowid: rs.lastInsertRowid, changes: rs.rowsAffected };
+}
 
 // --- Bibliotheque de versets / messages, integree en dur (pas besoin de table) ---
 const VERSES = {
@@ -100,4 +113,4 @@ const VERSES = {
   ]
 };
 
-module.exports = { db, VERSES };
+module.exports = { db, initDb, get, all, run, VERSES };

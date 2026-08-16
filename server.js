@@ -71,6 +71,16 @@ function requireAdmin(req, res, next) {
 // Petit wrapper pour eviter d'ecrire try/catch dans chaque route asynchrone
 const h = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
+// Normalise un numero de telephone pour la comparaison : on garde les 9 derniers
+// chiffres, ce qui permet de reconnaitre le meme numero ecrit "0470123456" ou
+// "+32470123456" ou "0032470123456" (l'indicatif pays et le 0 initial varient,
+// mais les derniers chiffres du numero local restent les memes).
+function phoneKey(phone) {
+  const digits = (phone || '').replace(/[^\d]/g, '');
+  if (digits.length < 6) return null;
+  return digits.slice(-9);
+}
+
 // ---------- Accueil ----------
 app.get('/', (req, res) => {
   res.redirect(req.session.user ? '/dashboard' : '/connexion');
@@ -311,12 +321,12 @@ app.post('/ames', requireAuth, h(async (req, res) => {
   if (!name) return res.render('soul_form', { soul: req.body, error: "Le nom est obligatoire.", duplicate: null });
 
   if (phone && !confirm_duplicate) {
-    const digits = phone.replace(/[^\d]/g, '');
-    if (digits.length >= 6) {
+    const key = phoneKey(phone);
+    if (key) {
       const candidates = await all(`
         SELECT s.*, u.name as owner_name FROM souls s JOIN users u ON u.id = s.created_by WHERE s.phone IS NOT NULL
       `, []);
-      const existing = candidates.find((c) => (c.phone || '').replace(/[^\d]/g, '') === digits);
+      const existing = candidates.find((c) => phoneKey(c.phone) === key);
       if (existing) {
         return res.render('soul_form', { soul: req.body, error: null, duplicate: existing });
       }
@@ -425,6 +435,81 @@ app.post('/priere/:id/repondu', requireAuth, h(async (req, res) => {
     await run('UPDATE prayer_requests SET answered = NOT answered WHERE id = ?', [p.id]);
   }
   res.redirect('/priere');
+}));
+
+// ---------- Rapports de sortie ----------
+app.get('/rapports', requireAuth, h(async (req, res) => {
+  const reports = await all(`
+    SELECT r.*, u.name as user_name FROM reports r
+    JOIN users u ON u.id = r.user_id
+    ORDER BY r.report_date DESC, r.created_at DESC
+    LIMIT 50
+  `, []);
+  for (const r of reports) {
+    r.people = await all('SELECT * FROM report_people WHERE report_id = ? ORDER BY id ASC', [r.id]);
+  }
+  res.render('reports', { reports });
+}));
+
+app.post('/rapports', requireAuth, h(async (req, res) => {
+  const { report_date, location, presence } = req.body;
+  const info = await run(
+    `INSERT INTO reports (user_id, report_date, location, presence)
+     VALUES (?, COALESCE(NULLIF(?, ''), date('now')), ?, ?)`,
+    [req.session.user.id, report_date || '', location || null, presence || null]
+  );
+  const reportId = info.lastInsertRowid;
+
+  // Les personnes rencontrees arrivent sous la forme person[0][name], person[0][phone], etc.
+  // (grace a express.urlencoded({extended:true}) qui comprend cette notation).
+  const peopleInput = req.body.person ? Object.values(req.body.person) : [];
+  for (const p of peopleInput) {
+    const name = (p.name || '').trim();
+    if (!name) continue;
+    const notes = (p.notes || '').trim() || null;
+    const phone = (p.phone || '').trim() || null;
+    const evangelized = p.evangelized ? 1 : 0;
+    const saved = p.saved ? 1 : 0;
+    const invited = p.invited ? 1 : 0;
+
+    // Toute personne marquee "sauvee" est automatiquement ajoutee au suivi des ames,
+    // pour ne pas avoir a la re-saisir a la main. On evite les doublons par telephone.
+    let soulId = null;
+    if (saved) {
+      let existing = null;
+      const key = phoneKey(phone);
+      if (key) {
+        const candidates = await all('SELECT * FROM souls WHERE phone IS NOT NULL', []);
+        existing = candidates.find((c) => phoneKey(c.phone) === key) || null;
+      }
+      if (existing) {
+        soulId = existing.id;
+      } else {
+        const soulInfo = await run(
+          `INSERT INTO souls (name, phone, city, location, status, notes, met_date, created_by)
+           VALUES (?, ?, NULL, ?, 'nouvelle_ame', ?, COALESCE(NULLIF(?, ''), date('now')), ?)`,
+          [name, phone, location || null, notes, report_date || '', req.session.user.id]
+        );
+        soulId = soulInfo.lastInsertRowid;
+      }
+    }
+
+    await run(
+      `INSERT INTO report_people (report_id, name, notes, evangelized, saved, phone, invited_church, soul_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [reportId, name, notes, evangelized, saved, phone, invited, soulId]
+    );
+  }
+
+  res.redirect('/rapports');
+}));
+
+app.post('/rapports/:id/supprimer', requireAuth, h(async (req, res) => {
+  const r = await get('SELECT * FROM reports WHERE id = ?', [req.params.id]);
+  if (r && r.user_id === req.session.user.id) {
+    await run('DELETE FROM reports WHERE id = ?', [r.id]);
+  }
+  res.redirect('/rapports');
 }));
 
 // ---------- Rappel hebdomadaire par email ----------

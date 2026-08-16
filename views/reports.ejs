@@ -1,0 +1,113 @@
+<%- include('partials/header', { title: 'Rapports de sortie' }) %>
+
+<div class="page-head">
+  <h1>📋 Rapports de sortie</h1>
+</div>
+
+<section class="panel">
+  <h2>Rédiger un rapport</h2>
+  <form method="POST" action="/rapports" class="stacked-form" id="report-form">
+    <div class="form-row">
+      <label>Date de la sortie
+        <input type="date" name="report_date" value="<%= new Date().toISOString().slice(0,10) %>">
+      </label>
+      <label>Lieu
+        <input type="text" name="location" placeholder="Ex : Place Jean Jaurès, Commune Herstal">
+      </label>
+    </div>
+    <label>Présence (qui était de la sortie)
+      <input type="text" name="presence" placeholder="Ex : Saint-Esprit + Gabriel, Teddy et Dan">
+    </label>
+
+    <h3 class="cat-title">Personnes rencontrées</h3>
+    <div id="people-rows"></div>
+    <button type="button" class="btn btn-small" id="add-person">+ Ajouter une personne rencontrée</button>
+
+    <button class="btn btn-primary" type="submit" style="margin-top:14px;">Publier le rapport</button>
+  </form>
+</section>
+
+<section class="prayer-wall">
+  <% if (reports.length === 0) { %>
+    <p class="empty">Aucun rapport pour l'instant. Sois le premier à partager ta sortie !</p>
+  <% } %>
+  <% reports.forEach(function(r) { %>
+    <div class="prayer-card">
+      <div class="prayer-meta">
+        <strong><%= r.user_name %></strong>
+        <span class="muted"><%= r.report_date %><% if (r.location) { %> — <%= r.location %><% } %></span>
+      </div>
+      <% if (r.presence) { %><p class="muted" style="margin:0 0 10px;">Présence : <%= r.presence %></p><% } %>
+      <% if (r.people && r.people.length > 0) { %>
+        <ul class="message-history">
+          <% r.people.forEach(function(p) { %>
+            <li>
+              <div class="message-content">
+                📍 <strong><%= p.name %></strong><% if (p.saved) { %> <span class="badge-answered">Sauvé(e) 🙌</span><% } %>
+                <% if (p.notes) { %><br><%= p.notes %><% } %>
+                <br><span class="muted">
+                  Âmes évangélisées : <%= p.evangelized ? 1 : 0 %> ·
+                  Âmes sauvées : <%= p.saved ? 1 : 0 %> ·
+                  Numéro de tel : <%= p.phone || '0' %> ·
+                  Invité(e) à l'église : <%= p.invited_church ? 1 : 0 %>
+                  <% if (p.soul_id) { %> · <a href="/ames/<%= p.soul_id %>">voir sa fiche</a><% } %>
+                </span>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+      <% if (r.user_id === currentUser.id) { %>
+        <form method="POST" action="/rapports/<%= r.id %>/supprimer" onsubmit="return confirm('Supprimer ce rapport ?');" style="margin-top:8px;">
+          <button class="btn btn-small btn-danger" type="submit">Supprimer</button>
+        </form>
+      <% } %>
+    </div>
+  <% }) %>
+</section>
+
+<script>
+  let personIndex = 0;
+  const rowsContainer = document.getElementById('people-rows');
+
+  function addPersonRow() {
+    const idx = personIndex++;
+    const div = document.createElement('div');
+    div.className = 'panel';
+    div.style.marginBottom = '12px';
+    div.innerHTML = `
+      <div class="form-row">
+        <label>Nom
+          <input type="text" name="person[${idx}][name]">
+        </label>
+        <label>Téléphone
+          <input type="tel" name="person[${idx}][phone]" placeholder="Optionnel">
+        </label>
+      </div>
+      <label>Récit
+        <textarea name="person[${idx}][notes]" rows="2" placeholder="Contexte de la rencontre..."></textarea>
+      </label>
+      <div class="form-row">
+        <label style="flex-direction:row; align-items:center; gap:8px;">
+          <input type="checkbox" name="person[${idx}][evangelized]" value="1" style="width:auto;"> Évangélisé(e)
+        </label>
+        <label style="flex-direction:row; align-items:center; gap:8px;">
+          <input type="checkbox" name="person[${idx}][saved]" value="1" style="width:auto;"> Sauvé(e)
+        </label>
+        <label style="flex-direction:row; align-items:center; gap:8px;">
+          <input type="checkbox" name="person[${idx}][invited]" value="1" style="width:auto;"> Invité(e) à l'église
+        </label>
+      </div>
+      <button type="button" class="btn btn-small btn-danger remove-person">Retirer cette personne</button>
+    `;
+    div.querySelector('.remove-person').addEventListener('click', function () {
+      div.remove();
+    });
+    rowsContainer.appendChild(div);
+  }
+
+  addPersonRow();
+  document.getElementById('add-person').addEventListener('click', addPersonRow);
+</script>
+
+<%- include('partials/footer') %>

@@ -1,25 +1,54 @@
-<%- include('partials/header', { title: 'Connexion' }) %>
+<%- include('partials/header', { title: soul ? 'Modifier une âme' : 'Nouvelle âme' }) %>
 
-<div class="auth-page">
-  <div class="auth-card">
-    <div class="auth-logo">🌾</div>
-    <h1>Semeurs</h1>
-    <p class="auth-subtitle">Suivi de l'évangélisation et des âmes gagnées</p>
-
-    <% if (error) { %><p class="error"><%= error %></p><% } %>
-
-    <form method="POST" action="/connexion" class="stacked-form">
-      <label>Email
-        <input type="email" name="email" required autofocus>
-      </label>
-      <label>Mot de passe
-        <input type="password" name="password" required>
-      </label>
-      <button class="btn btn-primary" type="submit">Se connecter</button>
-    </form>
-    <p class="auth-switch"><a href="/mot-de-passe-oublie">Mot de passe oublié ?</a></p>
-    <p class="auth-switch">Pas encore de compte ? <a href="/inscription">Créer un compte gagneur d'âmes</a></p>
-  </div>
+<div class="page-head">
+  <h1><%= soul && soul.id ? 'Modifier ' + soul.name : 'Nouvelle âme rencontrée' %></h1>
 </div>
+
+<% if (error) { %><p class="error"><%= error %></p><% } %>
+
+<% if (typeof duplicate !== 'undefined' && duplicate) { %>
+  <div class="error" style="margin-bottom:14px;">
+    ⚠️ Une âme avec un numéro de téléphone similaire existe déjà : <strong><%= duplicate.name %></strong><% if (duplicate.owner_name) { %> (ajoutée par <%= duplicate.owner_name %>)<% } %> —
+    <a href="/ames/<%= duplicate.id %>">voir sa fiche</a>.
+  </div>
+<% } %>
+
+<form method="POST" action="<%= soul && soul.id ? '/ames/' + soul.id : '/ames' %>" class="stacked-form panel">
+  <label>Nom complet *
+    <input type="text" name="name" required value="<%= soul ? soul.name || '' : '' %>" autofocus>
+  </label>
+  <label>Numéro de téléphone
+    <input type="tel" name="phone" placeholder="+33 6 12 34 56 78" value="<%= soul ? soul.phone || '' : '' %>">
+  </label>
+  <div class="form-row">
+    <label>Ville
+      <input type="text" name="city" value="<%= soul ? soul.city || '' : '' %>">
+    </label>
+    <label>Lieu de rencontre
+      <input type="text" name="location" placeholder="Marché, gare, rue..." value="<%= soul ? soul.location || '' : '' %>">
+    </label>
+  </div>
+  <div class="form-row">
+    <label>Date de rencontre
+      <input type="date" name="met_date" value="<%= soul && soul.met_date ? soul.met_date : new Date().toISOString().slice(0,10) %>">
+    </label>
+    <label>Statut
+      <select name="status">
+        <% Object.keys(STATUSES).forEach(function(s) { %>
+          <option value="<%= s %>" <%= soul && soul.status === s ? 'selected' : '' %>><%= STATUSES[s].label %></option>
+        <% }) %>
+      </select>
+    </label>
+  </div>
+  <label>Notes
+    <textarea name="notes" rows="4" placeholder="Contexte de la rencontre, besoins exprimés, prière faite ensemble..."><%= soul ? soul.notes || '' : '' %></textarea>
+  </label>
+  <% if (typeof duplicate !== 'undefined' && duplicate) { %>
+    <label style="flex-direction:row; align-items:center; gap:8px;">
+      <input type="checkbox" name="confirm_duplicate" value="1" style="width:auto;"> Ajouter quand même cette personne
+    </label>
+  <% } %>
+  <button class="btn btn-primary" type="submit"><%= soul && soul.id ? 'Enregistrer les modifications' : 'Ajouter cette âme' %></button>
+</form>
 
 <%- include('partials/footer') %>

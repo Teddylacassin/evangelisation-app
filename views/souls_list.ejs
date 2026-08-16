@@ -1,89 +1,43 @@
-<%- include('partials/header', { title: 'Tableau de bord' }) %>
+<%- include('partials/header', { title: 'Mes âmes' }) %>
 
 <div class="page-head">
-  <h1>Bonjour <%= currentUser.name.split(' ')[0] %> 👋</h1>
-  <a href="/ames/nouvelle" class="btn btn-primary">+ Ajouter une âme rencontrée</a>
+  <h1>Âmes suivies</h1>
+  <a href="/ames/nouvelle" class="btn btn-primary">+ Ajouter une âme</a>
 </div>
 
-<% if (announcements.length > 0) { %>
-  <section class="announcement-banner">
-    <% announcements.forEach(function(a) { %>
-      <div class="announcement-item">
-        <span class="announcement-icon">📣</span>
-        <div>
-          <p class="announcement-content"><%= a.content %></p>
-          <span class="announcement-meta"><%= a.author_name %> — <%= a.created_at %></span>
-        </div>
+<div class="toolbar">
+  <div class="tabs">
+    <a class="tab <%= viewScope === 'moi' ? 'active' : '' %>" href="/ames?scope=moi">Mes âmes</a>
+    <a class="tab <%= viewScope === 'equipe' ? 'active' : '' %>" href="/ames?scope=equipe">Toute l'équipe</a>
+  </div>
+  <form method="GET" action="/ames" class="search-form">
+    <input type="hidden" name="scope" value="<%= viewScope %>">
+    <input type="text" name="q" placeholder="Rechercher un nom..." value="<%= q %>">
+    <button class="btn btn-small" type="submit">Rechercher</button>
+  </form>
+  <a class="btn btn-small" href="/ames/export.csv?scope=<%= viewScope %>">⬇️ Export CSV</a>
+</div>
+
+<% if (souls.length === 0) { %>
+  <p class="empty">Aucune âme enregistrée pour l'instant. Commence par en ajouter une !</p>
+<% } else { %>
+<div class="soul-cards">
+  <% souls.forEach(function(s) { %>
+    <a class="soul-card" href="/ames/<%= s.id %>">
+      <div class="soul-card-top">
+        <span class="status-pill" style="background:<%= STATUSES[s.status] ? STATUSES[s.status].color : '#999' %>">
+          <%= STATUSES[s.status] ? STATUSES[s.status].label : s.status %>
+        </span>
       </div>
-    <% }) %>
-  </section>
+      <div class="soul-card-name"><%= s.name %></div>
+      <div class="soul-card-meta">
+        <% if (s.city) { %><span>📍 <%= s.city %></span><% } %>
+        <% if (s.phone) { %><span>📞 <%= s.phone %></span><% } %>
+      </div>
+      <div class="soul-card-meta muted">Rencontrée le <%= s.met_date %><% if (viewScope === 'equipe') { %> par <%= s.owner_name %><% } %></div>
+    </a>
+  <% }) %>
+</div>
 <% } %>
-
-<section class="stat-grid">
-  <div class="stat-card highlight">
-    <div class="stat-value"><%= total %></div>
-    <div class="stat-label">Âmes gagnées au total</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-value"><%= thisWeek %></div>
-    <div class="stat-label">Cette semaine</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-value"><%= thisMonth %></div>
-    <div class="stat-label">Ces 30 derniers jours</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-value"><%= teamTotal %></div>
-    <div class="stat-label">Âmes gagnées par toute l'équipe</div>
-  </div>
-  <% if (prayerSupportCount > 0) { %>
-    <div class="stat-card" style="grid-column: 1 / -1;">
-      <div class="stat-value">🙏 <%= prayerSupportCount %></div>
-      <div class="stat-label">Fois où l'équipe a prié pour tes sujets de prière</div>
-    </div>
-  <% } %>
-</section>
-
-<section class="panel">
-  <h2>Répartition par statut</h2>
-  <div class="status-bars">
-    <% Object.keys(STATUSES).forEach(function(s) { %>
-      <div class="status-row">
-        <span class="status-dot" style="background:<%= STATUSES[s].color %>"></span>
-        <span class="status-name"><%= STATUSES[s].label %></span>
-        <span class="status-count"><%= statusCounts[s] %></span>
-      </div>
-    <% }) %>
-  </div>
-</section>
-
-<div class="two-col">
-  <section class="panel">
-    <h2>À recontacter</h2>
-    <p class="muted">Âmes sans nouvelles depuis plus de 7 jours</p>
-    <% if (aRecontacter.length === 0) { %>
-      <p class="empty">Tu es à jour, rien à recontacter pour l'instant 🎉</p>
-    <% } else { %>
-      <ul class="soul-mini-list">
-        <% aRecontacter.forEach(function(s) { %>
-          <li>
-            <a href="/ames/<%= s.id %>"><%= s.name %></a>
-            <span class="muted"><%= s.city || '' %></span>
-            <a class="btn btn-small" href="/ames/<%= s.id %>/message">Envoyer un verset</a>
-          </li>
-        <% }) %>
-      </ul>
-    <% } %>
-  </section>
-
-  <section class="panel">
-    <h2>Classement de l'équipe</h2>
-    <ol class="ranking">
-      <% teamRanking.forEach(function(r) { %>
-        <li><span><%= r.name %></span><strong><%= r.c %></strong></li>
-      <% }) %>
-    </ol>
-  </section>
-</div>
 
 <%- include('partials/footer') %>

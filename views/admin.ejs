@@ -1,0 +1,35 @@
+<%- include('partials/header', { title: 'Administration' }) %>
+
+<div class="page-head">
+  <h1>📣 Administration — Annonces</h1>
+</div>
+
+<section class="panel">
+  <h2>Envoyer une annonce à toute l'équipe</h2>
+  <p class="muted">Le message apparaîtra en haut du tableau de bord de chaque gagneur d'âme.</p>
+  <form method="POST" action="/admin/annonces" class="stacked-form">
+    <textarea name="content" rows="3" placeholder="Ex : Bravo à tous pour cette semaine, continuons à semer ! Rendez-vous samedi 10h pour la sortie d'évangélisation." required></textarea>
+    <button class="btn btn-primary" type="submit">Publier l'annonce</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Annonces publiées</h2>
+  <% if (announcements.length === 0) { %>
+    <p class="empty">Aucune annonce publiée pour l'instant.</p>
+  <% } else { %>
+    <ul class="message-history">
+      <% announcements.forEach(function(a) { %>
+        <li>
+          <div class="message-meta"><%= a.author_name %> — <%= a.created_at %></div>
+          <div class="message-content"><%= a.content %></div>
+          <form method="POST" action="/admin/annonces/<%= a.id %>/supprimer" onsubmit="return confirm('Supprimer cette annonce ?');" style="margin-top:8px;">
+            <button class="btn btn-small btn-danger" type="submit">Supprimer</button>
+          </form>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

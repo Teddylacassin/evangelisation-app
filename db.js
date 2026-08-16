@@ -63,6 +63,14 @@ CREATE TABLE IF NOT EXISTS prayer_supports (
   FOREIGN KEY (prayer_id) REFERENCES prayer_requests(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS announcements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 `);
 
 // --- Bibliotheque de versets / messages, integree en dur (pas besoin de table) ---

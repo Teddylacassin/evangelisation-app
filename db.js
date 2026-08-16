@@ -74,8 +74,35 @@ async function initDb() {
       content TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS soul_status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      soul_id INTEGER NOT NULL,
+      old_status TEXT,
+      new_status TEXT NOT NULL,
+      changed_by INTEGER NOT NULL,
+      changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (soul_id) REFERENCES souls(id) ON DELETE CASCADE,
+      FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE CASCADE
     )`
   ], 'write');
+
+  // Ajout des colonnes necessaires a la reinitialisation de mot de passe par email.
+  // Comme la table "users" existe deja en production (Turso), on ne peut pas
+  // simplement la recreer : on ajoute les colonnes une par une, et on ignore
+  // l'erreur si elles existent deja (c'est le cas apres le tout premier deploiement
+  // de cette fonctionnalite).
+  const alterations = [
+    "ALTER TABLE users ADD COLUMN reset_token TEXT",
+    "ALTER TABLE users ADD COLUMN reset_token_expires TEXT"
+  ];
+  for (const sql of alterations) {
+    try {
+      await db.execute(sql);
+    } catch (e) {
+      // colonne deja existante : rien a faire
+    }
+  }
 }
 
 // Petits helpers pour ecrire des requetes proches du style precedent (better-sqlite3)

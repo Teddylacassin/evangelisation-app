@@ -14,6 +14,7 @@
     <a href="/dashboard">Tableau de bord</a>
     <a href="/ames">Mes âmes</a>
     <a href="/priere">Espace prière</a>
+    <% if (isAdmin) { %><a href="/admin">Administration</a><% } %>
   </nav>
   <div class="user-menu">
     <span class="user-name"><%= currentUser.name %></span>

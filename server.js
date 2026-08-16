@@ -30,14 +30,32 @@ const STATUSES = {
   injoignable: { label: "Injoignable", color: "#6b7280" }
 };
 
+// Liste des administrateurs : reglable sur Render (Environment > ADMIN_EMAILS),
+// emails separes par des virgules, ex: "moi@exemple.com,autre@exemple.com"
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'teddylacassin@hotmail.com')
+  .split(',')
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean);
+
+function isAdminEmail(email) {
+  return !!email && ADMIN_EMAILS.includes(email.toLowerCase());
+}
+
 app.use((req, res, next) => {
   res.locals.currentUser = req.session.user || null;
   res.locals.STATUSES = STATUSES;
+  res.locals.isAdmin = req.session.user ? isAdminEmail(req.session.user.email) : false;
   next();
 });
 
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.redirect('/connexion');
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.session.user) return res.redirect('/connexion');
+  if (!isAdminEmail(req.session.user.email)) return res.status(403).send('Accès réservé aux administrateurs.');
   next();
 }
 
@@ -117,7 +135,36 @@ app.get('/dashboard', requireAuth, (req, res) => {
     GROUP BY u.id ORDER BY c DESC LIMIT 10
   `).all();
 
-  res.render('dashboard', { total, statusCounts, thisWeek, thisMonth, aRecontacter, teamTotal, teamRanking });
+  const announcements = db.prepare(`
+    SELECT a.*, u.name as author_name FROM announcements a
+    JOIN users u ON u.id = a.user_id
+    ORDER BY a.created_at DESC LIMIT 5
+  `).all();
+
+  res.render('dashboard', { total, statusCounts, thisWeek, thisMonth, aRecontacter, teamTotal, teamRanking, announcements });
+});
+
+// ---------- Administration (annonces a l'equipe) ----------
+app.get('/admin', requireAdmin, (req, res) => {
+  const announcements = db.prepare(`
+    SELECT a.*, u.name as author_name FROM announcements a
+    JOIN users u ON u.id = a.user_id
+    ORDER BY a.created_at DESC
+  `).all();
+  res.render('admin', { announcements });
+});
+
+app.post('/admin/annonces', requireAdmin, (req, res) => {
+  const { content } = req.body;
+  if (content && content.trim()) {
+    db.prepare('INSERT INTO announcements (user_id, content) VALUES (?, ?)').run(req.session.user.id, content.trim());
+  }
+  res.redirect('/admin');
+});
+
+app.post('/admin/annonces/:id/supprimer', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM announcements WHERE id = ?').run(req.params.id);
+  res.redirect('/admin');
 });
 
 // ---------- Ames ----------

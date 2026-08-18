@@ -267,7 +267,15 @@ app.get('/admin', requireAdmin, h(async (req, res) => {
   `, []);
   const zoomLink = await getSetting('zoom_link');
   const zoomLabel = await getSetting('zoom_label');
-  res.render('admin', { announcements, zoomLink, zoomLabel });
+  const teamMembers = await all('SELECT id, name FROM users ORDER BY name ASC', []);
+  const prayerMeetings = await all(`
+    SELECT pm.*, l.name as lead_name, c.name as colead_name
+    FROM prayer_meetings pm
+    LEFT JOIN users l ON l.id = pm.lead_id
+    LEFT JOIN users c ON c.id = pm.colead_id
+    ORDER BY pm.meeting_date ASC
+  `, []);
+  res.render('admin', { announcements, zoomLink, zoomLabel, teamMembers, prayerMeetings });
 }));
 
 app.post('/admin/annonces', requireAdmin, h(async (req, res) => {
@@ -287,6 +295,22 @@ app.post('/admin/zoom', requireAdmin, h(async (req, res) => {
   const { zoom_link, zoom_label } = req.body;
   await setSetting('zoom_link', (zoom_link || '').trim());
   await setSetting('zoom_label', (zoom_label || '').trim());
+  res.redirect('/admin');
+}));
+
+app.post('/admin/reunions-priere', requireAdmin, h(async (req, res) => {
+  const { meeting_date, topic, lead_id, colead_id } = req.body;
+  if (meeting_date && meeting_date.trim()) {
+    await run(
+      'INSERT INTO prayer_meetings (meeting_date, topic, lead_id, colead_id, created_by) VALUES (?, ?, ?, ?, ?)',
+      [meeting_date.trim(), (topic || '').trim() || null, lead_id || null, colead_id || null, req.session.user.id]
+    );
+  }
+  res.redirect('/admin');
+}));
+
+app.post('/admin/reunions-priere/:id/supprimer', requireAdmin, h(async (req, res) => {
+  await run('DELETE FROM prayer_meetings WHERE id = ?', [req.params.id]);
   res.redirect('/admin');
 }));
 
@@ -441,7 +465,16 @@ app.get('/priere', requireAuth, h(async (req, res) => {
   `, [uid]);
   const zoomLink = await getSetting('zoom_link');
   const zoomLabel = await getSetting('zoom_label');
-  res.render('prayer', { requests, zoomLink, zoomLabel });
+  const nextMeeting = await get(`
+    SELECT pm.*, l.name as lead_name, c.name as colead_name
+    FROM prayer_meetings pm
+    LEFT JOIN users l ON l.id = pm.lead_id
+    LEFT JOIN users c ON c.id = pm.colead_id
+    WHERE pm.meeting_date >= date('now')
+    ORDER BY pm.meeting_date ASC
+    LIMIT 1
+  `, []);
+  res.render('prayer', { requests, zoomLink, zoomLabel, nextMeeting });
 }));
 
 app.post('/priere', requireAuth, h(async (req, res) => {

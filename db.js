@@ -116,6 +116,11 @@ async function initDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(user_id, metric),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`
   ], 'write');
 

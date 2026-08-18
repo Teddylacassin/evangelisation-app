@@ -246,13 +246,28 @@ app.get('/dashboard', requireAuth, h(async (req, res) => {
 }));
 
 // ---------- Administration (annonces a l'equipe) ----------
+async function getSetting(key) {
+  const row = await get('SELECT value FROM settings WHERE key = ?', [key]);
+  return row ? row.value : null;
+}
+
+async function setSetting(key, value) {
+  await run(
+    `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+    [key, value]
+  );
+}
+
 app.get('/admin', requireAdmin, h(async (req, res) => {
   const announcements = await all(`
     SELECT a.*, u.name as author_name FROM announcements a
     JOIN users u ON u.id = a.user_id
     ORDER BY a.created_at DESC
   `, []);
-  res.render('admin', { announcements });
+  const zoomLink = await getSetting('zoom_link');
+  const zoomLabel = await getSetting('zoom_label');
+  res.render('admin', { announcements, zoomLink, zoomLabel });
 }));
 
 app.post('/admin/annonces', requireAdmin, h(async (req, res) => {
@@ -265,6 +280,13 @@ app.post('/admin/annonces', requireAdmin, h(async (req, res) => {
 
 app.post('/admin/annonces/:id/supprimer', requireAdmin, h(async (req, res) => {
   await run('DELETE FROM announcements WHERE id = ?', [req.params.id]);
+  res.redirect('/admin');
+}));
+
+app.post('/admin/zoom', requireAdmin, h(async (req, res) => {
+  const { zoom_link, zoom_label } = req.body;
+  await setSetting('zoom_link', (zoom_link || '').trim());
+  await setSetting('zoom_label', (zoom_label || '').trim());
   res.redirect('/admin');
 }));
 
@@ -417,7 +439,9 @@ app.get('/priere', requireAuth, h(async (req, res) => {
     FROM prayer_requests p JOIN users u ON u.id = p.user_id
     ORDER BY p.answered ASC, p.created_at DESC
   `, [uid]);
-  res.render('prayer', { requests });
+  const zoomLink = await getSetting('zoom_link');
+  const zoomLabel = await getSetting('zoom_label');
+  res.render('prayer', { requests, zoomLink, zoomLabel });
 }));
 
 app.post('/priere', requireAuth, h(async (req, res) => {

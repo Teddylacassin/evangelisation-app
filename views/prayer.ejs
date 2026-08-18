@@ -4,6 +4,16 @@
   <h1>🙏 Espace prière</h1>
 </div>
 
+<% if (zoomLink) { %>
+  <section class="panel" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <div>
+      <h2 style="margin-bottom:4px;">🎥 Temps de prière en direct</h2>
+      <p class="muted" style="margin:0;"><%= zoomLabel || 'Rejoins-nous sur Zoom' %></p>
+    </div>
+    <a class="btn btn-primary" href="<%= zoomLink %>" target="_blank" rel="noopener">Rejoindre sur Zoom</a>
+  </section>
+<% } %>
+
 <section class="panel">
   <h2>Partager un sujet de prière</h2>
   <form method="POST" action="/priere" class="stacked-form">

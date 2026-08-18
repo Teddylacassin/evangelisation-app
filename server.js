@@ -512,6 +512,41 @@ app.post('/rapports/:id/supprimer', requireAuth, h(async (req, res) => {
   res.redirect('/rapports');
 }));
 
+// ---------- Statistiques (issues des rapports de sortie) ----------
+app.get('/statistiques', requireAuth, h(async (req, res) => {
+  const period = ['semaine', 'mois', 'tout'].includes(req.query.period) ? req.query.period : 'mois';
+  let dateFilter = '';
+  if (period === 'semaine') dateFilter = "AND r.report_date >= date('now','-7 days')";
+  else if (period === 'mois') dateFilter = "AND r.report_date >= date('now','-30 days')";
+
+  const totals = await get(`
+    SELECT
+      COUNT(DISTINCT r.id) as total_sorties,
+      COUNT(rp.id) as total_personnes,
+      COALESCE(SUM(rp.evangelized),0) as total_evangelized,
+      COALESCE(SUM(rp.saved),0) as total_saved,
+      COALESCE(SUM(rp.invited_church),0) as total_invited
+    FROM reports r
+    LEFT JOIN report_people rp ON rp.report_id = r.id
+    WHERE 1=1 ${dateFilter}
+  `, []);
+
+  const ranking = await all(`
+    SELECT u.name,
+      COUNT(DISTINCT r.id) as sorties,
+      COALESCE(SUM(rp.evangelized),0) as evangelized,
+      COALESCE(SUM(rp.saved),0) as saved,
+      COALESCE(SUM(rp.invited_church),0) as invited
+    FROM users u
+    LEFT JOIN reports r ON r.user_id = u.id ${dateFilter}
+    LEFT JOIN report_people rp ON rp.report_id = r.id
+    GROUP BY u.id
+    ORDER BY saved DESC, evangelized DESC, sorties DESC
+  `, []);
+
+  res.render('statistics', { period, totals, ranking });
+}));
+
 // ---------- Rappel hebdomadaire par email ----------
 // Chaque lundi a 8h (heure de Bruxelles), on envoie a chaque gagneur d'ame la liste
 // des personnes qu'il n'a pas recontactees depuis plus de 7 jours. Si RESEND_API_KEY

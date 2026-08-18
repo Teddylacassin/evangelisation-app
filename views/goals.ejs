@@ -1,0 +1,55 @@
+<%- include('partials/header', { title: 'Mes objectifs' }) %>
+
+<div class="page-head">
+  <h1>🎯 Mes objectifs</h1>
+</div>
+
+<section class="panel">
+  <h2>Définir un objectif</h2>
+  <form method="POST" action="/objectifs" class="stacked-form">
+    <div class="form-row">
+      <label>Statistique
+        <select name="metric" required>
+          <% Object.keys(GOAL_METRICS).forEach(function(m) { %>
+            <option value="<%= m %>"><%= GOAL_METRICS[m] %></option>
+          <% }) %>
+        </select>
+      </label>
+      <label>Période
+        <select name="period_type" required>
+          <% Object.keys(GOAL_PERIODS).forEach(function(p) { %>
+            <option value="<%= p %>"><%= GOAL_PERIODS[p].label %></option>
+          <% }) %>
+        </select>
+      </label>
+      <label>Cible
+        <input type="number" name="target" min="1" required placeholder="Ex : 10">
+      </label>
+    </div>
+    <button class="btn btn-primary" type="submit">Enregistrer l'objectif</button>
+  </form>
+  <p class="muted" style="margin-top:8px;">Si tu définis un nouvel objectif sur une statistique que tu suis déjà, il remplacera l'ancien.</p>
+</section>
+
+<% if (goals.length === 0) { %>
+  <p class="empty">Aucun objectif défini pour l'instant.</p>
+<% } else { %>
+<div class="two-col">
+  <% goals.forEach(function(g) { %>
+    <section class="panel">
+      <h2><%= GOAL_METRICS[g.metric] %></h2>
+      <p class="muted"><%= GOAL_PERIODS[g.period_type].label %></p>
+      <div class="stat-value" style="font-size:1.4rem;"><%= g.achieved %> / <%= g.target %></div>
+      <div style="background:var(--border); border-radius:999px; height:10px; margin:10px 0; overflow:hidden;">
+        <div style="background:var(--primary); height:100%; width:<%= g.percent %>%;"></div>
+      </div>
+      <p class="muted"><%= g.percent %>%<% if (g.percent >= 100) { %> — Objectif atteint 🎉<% } %></p>
+      <form method="POST" action="/objectifs/<%= g.id %>/supprimer" onsubmit="return confirm('Supprimer cet objectif ?');">
+        <button class="btn btn-small btn-danger" type="submit">Supprimer</button>
+      </form>
+    </section>
+  <% }) %>
+</div>
+<% } %>
+
+<%- include('partials/footer') %>

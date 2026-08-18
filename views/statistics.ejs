@@ -1,0 +1,52 @@
+<%- include('partials/header', { title: 'Statistiques' }) %>
+
+<div class="page-head">
+  <h1>📊 Statistiques</h1>
+</div>
+
+<div class="tabs" style="margin-bottom:20px;">
+  <a class="tab <%= period === 'semaine' ? 'active' : '' %>" href="/statistiques?period=semaine">Cette semaine</a>
+  <a class="tab <%= period === 'mois' ? 'active' : '' %>" href="/statistiques?period=mois">Ce mois-ci</a>
+  <a class="tab <%= period === 'tout' ? 'active' : '' %>" href="/statistiques?period=tout">Depuis le début</a>
+</div>
+
+<section class="stat-grid">
+  <div class="stat-card highlight">
+    <div class="stat-value"><%= totals.total_sorties %></div>
+    <div class="stat-label">Sorties d'évangélisation</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value"><%= totals.total_personnes %></div>
+    <div class="stat-label">Personnes rencontrées</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value"><%= totals.total_evangelized %></div>
+    <div class="stat-label">Âmes évangélisées</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value"><%= totals.total_saved %></div>
+    <div class="stat-label">Âmes sauvées</div>
+  </div>
+  <div class="stat-card" style="grid-column: 1 / -1;">
+    <div class="stat-value"><%= totals.total_invited %></div>
+    <div class="stat-label">Invitations à l'église</div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Classement de l'équipe</h2>
+  <% if (ranking.length === 0 || ranking.every(function(r) { return r.sorties === 0; })) { %>
+    <p class="empty">Aucun rapport pour cette période.</p>
+  <% } else { %>
+  <ol class="ranking">
+    <% ranking.forEach(function(r) { %>
+      <li>
+        <span><%= r.name %></span>
+        <strong><%= r.saved %> sauvée(s) · <%= r.evangelized %> évangélisée(s) · <%= r.sorties %> sortie(s)</strong>
+      </li>
+    <% }) %>
+  </ol>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

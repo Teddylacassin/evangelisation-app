@@ -4,13 +4,26 @@
   <h1>🙏 Espace prière</h1>
 </div>
 
-<% if (zoomLink) { %>
+<% if (zoomLink || nextMeeting) { %>
   <section class="panel" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
     <div>
-      <h2 style="margin-bottom:4px;">🎥 Temps de prière en direct</h2>
-      <p class="muted" style="margin:0;"><%= zoomLabel || 'Rejoins-nous sur Zoom' %></p>
+      <h2 style="margin-bottom:4px;">🎥 Prochain temps de prière</h2>
+      <% if (zoomLabel) { %><p class="muted" style="margin:0;"><%= zoomLabel %></p><% } %>
+      <% if (nextMeeting) { %>
+        <p style="margin:6px 0 0;"><strong>📅 <%= nextMeeting.meeting_date %></strong></p>
+        <% if (nextMeeting.topic) { %><p style="margin:2px 0 0;"><strong>Sujet :</strong> <%= nextMeeting.topic %></p><% } %>
+        <% if (nextMeeting.lead_name || nextMeeting.colead_name) { %>
+          <p class="muted" style="margin:4px 0 0;">
+            <% if (nextMeeting.lead_name) { %>Lead : <%= nextMeeting.lead_name %><% } %>
+            <% if (nextMeeting.lead_name && nextMeeting.colead_name) { %> · <% } %>
+            <% if (nextMeeting.colead_name) { %>Co-lead : <%= nextMeeting.colead_name %><% } %>
+          </p>
+        <% } %>
+      <% } %>
     </div>
-    <a class="btn btn-primary" href="<%= zoomLink %>" target="_blank" rel="noopener">Rejoindre sur Zoom</a>
+    <% if (zoomLink) { %>
+      <a class="btn btn-primary" href="<%= zoomLink %>" target="_blank" rel="noopener">Rejoindre sur Zoom</a>
+    <% } %>
   </section>
 <% } %>
 

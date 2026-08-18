@@ -14,8 +14,8 @@
 </section>
 
 <section class="panel">
-  <h2>🎥 Lien de la réunion de prière (Zoom)</h2>
-  <p class="muted">Ce lien s'affiche en haut de l'espace prière pour toute l'équipe, jusqu'à ce que tu le changes.</p>
+  <h2>🎥 Salle Zoom de la réunion de prière</h2>
+  <p class="muted">Le lien fixe de votre réunion récurrente (même lien à chaque fois). S'affiche en haut de l'espace prière.</p>
   <form method="POST" action="/admin/zoom" class="stacked-form">
     <div class="form-row">
       <label>Quand ?
@@ -27,6 +27,59 @@
     </div>
     <button class="btn btn-primary" type="submit">Mettre à jour</button>
   </form>
+</section>
+
+<section class="panel">
+  <h2>📅 Programmer les leads de prière</h2>
+  <p class="muted">Programme à l'avance qui va leader et co-leader chaque réunion. L'espace prière affiche automatiquement la prochaine à venir.</p>
+  <form method="POST" action="/admin/reunions-priere" class="stacked-form">
+    <div class="form-row">
+      <label>Date
+        <input type="date" name="meeting_date" required>
+      </label>
+      <label>Sujet de la prière
+        <input type="text" name="topic" placeholder="Ex : Prions pour les âmes rencontrées ce mois-ci">
+      </label>
+    </div>
+    <div class="form-row">
+      <label>Lead
+        <select name="lead_id">
+          <option value="">— Aucun —</option>
+          <% teamMembers.forEach(function(m) { %>
+            <option value="<%= m.id %>"><%= m.name %></option>
+          <% }) %>
+        </select>
+      </label>
+      <label>Co-lead
+        <select name="colead_id">
+          <option value="">— Aucun —</option>
+          <% teamMembers.forEach(function(m) { %>
+            <option value="<%= m.id %>"><%= m.name %></option>
+          <% }) %>
+        </select>
+      </label>
+    </div>
+    <button class="btn btn-primary" type="submit">Programmer</button>
+  </form>
+
+  <% if (prayerMeetings.length === 0) { %>
+    <p class="empty" style="margin-top:16px;">Aucune réunion programmée pour l'instant.</p>
+  <% } else { %>
+    <ul class="message-history" style="margin-top:16px;">
+      <% prayerMeetings.forEach(function(m) { %>
+        <li>
+          <div class="message-meta"><%= m.meeting_date %></div>
+          <div class="message-content">
+            <% if (m.topic) { %><strong><%= m.topic %></strong><br><% } %>
+            Lead : <%= m.lead_name || '—' %> · Co-lead : <%= m.colead_name || '—' %>
+          </div>
+          <form method="POST" action="/admin/reunions-priere/<%= m.id %>/supprimer" onsubmit="return confirm('Supprimer cette réunion programmée ?');" style="margin-top:8px;">
+            <button class="btn btn-small btn-danger" type="submit">Supprimer</button>
+          </form>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
 </section>
 
 <section class="panel">

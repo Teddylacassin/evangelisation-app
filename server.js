@@ -231,7 +231,18 @@ app.get('/dashboard', requireAuth, h(async (req, res) => {
     WHERE p.user_id = ?
   `, [uid])).c;
 
-  res.render('dashboard', { total, statusCounts, thisWeek, thisMonth, aRecontacter, teamTotal, teamRanking, announcements, prayerSupportCount });
+  const goals = await all('SELECT * FROM goals WHERE user_id = ? ORDER BY id ASC', [uid]);
+  for (const g of goals) {
+    g.achieved = await computeGoalProgress(uid, g.metric, g.period_type);
+    g.percent = g.target > 0 ? Math.min(100, Math.round((g.achieved / g.target) * 100)) : 0;
+  }
+
+  const recentSouls = await all('SELECT * FROM souls WHERE created_by = ? ORDER BY created_at DESC LIMIT 5', [uid]);
+
+  res.render('dashboard', {
+    total, statusCounts, thisWeek, thisMonth, aRecontacter, teamTotal, teamRanking,
+    announcements, prayerSupportCount, goals, GOAL_METRICS, GOAL_PERIODS, recentSouls
+  });
 }));
 
 // ---------- Administration (annonces a l'equipe) ----------
@@ -306,7 +317,7 @@ app.get('/ames/export.csv', requireAuth, h(async (req, res) => {
     if (viewScope === 'equipe') row.push(s.owner_name);
     lines.push(row.map(esc).join(','));
   });
-  const csv = '\uFEFF' + lines.join('\r\n');
+  const csv = '﻿' + lines.join('\r\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="ames-${viewScope}.csv"`);
   res.send(csv);
@@ -545,6 +556,72 @@ app.get('/statistiques', requireAuth, h(async (req, res) => {
   `, []);
 
   res.render('statistics', { period, totals, ranking });
+}));
+
+// ---------- Mes objectifs ----------
+const GOAL_METRICS = {
+  saved: 'Âmes sauvées',
+  evangelized: 'Âmes évangélisées',
+  invited: "Invitations à l'église",
+  sorties: 'Sorties effectuées'
+};
+const GOAL_PERIODS = {
+  semaine: { label: 'Cette semaine', days: 7 },
+  mois: { label: 'Ce mois-ci', days: 30 },
+  annee: { label: 'Cette année', days: 365 }
+};
+
+async function computeGoalProgress(userId, metric, periodType) {
+  const days = GOAL_PERIODS[periodType] ? GOAL_PERIODS[periodType].days : 30;
+  if (metric === 'sorties') {
+    const row = await get(
+      `SELECT COUNT(*) c FROM reports WHERE user_id = ? AND report_date >= date('now', ?)`,
+      [userId, `-${days} days`]
+    );
+    return row.c;
+  }
+  const column = metric === 'saved' ? 'rp.saved' : metric === 'evangelized' ? 'rp.evangelized' : 'rp.invited_church';
+  const row = await get(
+    `SELECT COALESCE(SUM(${column}),0) c
+     FROM reports r JOIN report_people rp ON rp.report_id = r.id
+     WHERE r.user_id = ? AND r.report_date >= date('now', ?)`,
+    [userId, `-${days} days`]
+  );
+  return row.c;
+}
+
+app.get('/objectifs', requireAuth, h(async (req, res) => {
+  const uid = req.session.user.id;
+  const goals = await all('SELECT * FROM goals WHERE user_id = ? ORDER BY id ASC', [uid]);
+  for (const g of goals) {
+    g.achieved = await computeGoalProgress(uid, g.metric, g.period_type);
+    g.percent = g.target > 0 ? Math.min(100, Math.round((g.achieved / g.target) * 100)) : 0;
+  }
+  res.render('goals', { goals, GOAL_METRICS, GOAL_PERIODS });
+}));
+
+app.post('/objectifs', requireAuth, h(async (req, res) => {
+  const uid = req.session.user.id;
+  const { metric, period_type, target } = req.body;
+  if (!GOAL_METRICS[metric] || !GOAL_PERIODS[period_type]) return res.redirect('/objectifs');
+  const targetNum = parseInt(target, 10);
+  if (!targetNum || targetNum <= 0) return res.redirect('/objectifs');
+
+  const existing = await get('SELECT id FROM goals WHERE user_id = ? AND metric = ?', [uid, metric]);
+  if (existing) {
+    await run('UPDATE goals SET period_type = ?, target = ? WHERE id = ?', [period_type, targetNum, existing.id]);
+  } else {
+    await run('INSERT INTO goals (user_id, metric, period_type, target) VALUES (?, ?, ?, ?)', [uid, metric, period_type, targetNum]);
+  }
+  res.redirect('/objectifs');
+}));
+
+app.post('/objectifs/:id/supprimer', requireAuth, h(async (req, res) => {
+  const g = await get('SELECT * FROM goals WHERE id = ?', [req.params.id]);
+  if (g && g.user_id === req.session.user.id) {
+    await run('DELETE FROM goals WHERE id = ?', [g.id]);
+  }
+  res.redirect('/objectifs');
 }));
 
 // ---------- Rappel hebdomadaire par email ----------

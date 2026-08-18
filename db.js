@@ -121,6 +121,18 @@ async function initDb() {
       key TEXT PRIMARY KEY,
       value TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS prayer_meetings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_date TEXT NOT NULL,
+      topic TEXT,
+      lead_id INTEGER,
+      colead_id INTEGER,
+      created_by INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (lead_id) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY (colead_id) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
     )`
   ], 'write');
 

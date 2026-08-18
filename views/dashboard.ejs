@@ -36,7 +36,53 @@
     <div class="stat-value"><%= teamTotal %></div>
     <div class="stat-label">Âmes gagnées par toute l'équipe</div>
   </div>
+  <% if (prayerSupportCount > 0) { %>
+    <div class="stat-card" style="grid-column: 1 / -1;">
+      <div class="stat-value">🙏 <%= prayerSupportCount %></div>
+      <div class="stat-label">Fois où l'équipe a prié pour tes sujets de prière</div>
+    </div>
+  <% } %>
 </section>
+
+<div class="two-col">
+  <section class="panel">
+    <h2>🎯 Mes objectifs</h2>
+    <% if (goals.length === 0) { %>
+      <p class="empty">Aucun objectif défini pour l'instant.</p>
+      <a class="btn btn-small" href="/objectifs">Définir un objectif</a>
+    <% } else { %>
+      <% goals.forEach(function(g) { %>
+        <div style="margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; font-size:0.9rem;">
+            <span><%= GOAL_METRICS[g.metric] %> · <%= GOAL_PERIODS[g.period_type].label %></span>
+            <strong><%= g.achieved %> / <%= g.target %></strong>
+          </div>
+          <div style="background:var(--border); border-radius:999px; height:8px; margin-top:4px; overflow:hidden;">
+            <div style="background:var(--primary); height:100%; width:<%= g.percent %>%;"></div>
+          </div>
+        </div>
+      <% }) %>
+      <a class="btn btn-small" href="/objectifs" style="margin-top:4px;">Gérer mes objectifs</a>
+    <% } %>
+  </section>
+
+  <section class="panel">
+    <h2>Mes âmes récentes</h2>
+    <% if (recentSouls.length === 0) { %>
+      <p class="empty">Aucune âme enregistrée pour l'instant.</p>
+    <% } else { %>
+      <ul class="soul-mini-list">
+        <% recentSouls.forEach(function(s) { %>
+          <li>
+            <a href="/ames/<%= s.id %>"><%= s.name %></a>
+            <span class="muted"><%= STATUSES[s.status].label %></span>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+    <a class="btn btn-small" href="/ames" style="margin-top:8px;">Voir toutes mes âmes</a>
+  </section>
+</div>
 
 <section class="panel">
   <h2>Répartition par statut</h2>

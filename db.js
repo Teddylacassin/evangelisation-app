@@ -106,6 +106,16 @@ async function initDb() {
       soul_id INTEGER,
       FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
       FOREIGN KEY (soul_id) REFERENCES souls(id) ON DELETE SET NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS goals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      metric TEXT NOT NULL,
+      period_type TEXT NOT NULL,
+      target INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, metric),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`
   ], 'write');
 

@@ -45,20 +45,10 @@
       <div style="margin-top:12px;">
         <% if (r.presence) { %><p class="muted" style="margin:0 0 10px;">Présence : <%= r.presence %></p><% } %>
         <% if (r.people && r.people.length > 0) { %>
-          <ul class="message-history">
+          <ul class="message-history" style="gap:2px;">
             <% r.people.forEach(function(p) { %>
-              <li>
-                <div class="message-content">
-                  📍 <strong><%= p.name %></strong><% if (p.saved) { %> <span class="badge-answered">Sauvé(e) 🙌</span><% } %>
-                  <% if (p.notes) { %><br><%= p.notes %><% } %>
-                  <br><span class="muted">
-                    Âmes évangélisées : <%= p.evangelized ? 1 : 0 %> ·
-                    Âmes sauvées : <%= p.saved ? 1 : 0 %> ·
-                    Numéro de tel : <%= p.phone || '0' %> ·
-                    Invité(e) à l'église : <%= p.invited_church ? 1 : 0 %>
-                    <% if (p.soul_id) { %> · <a href="/ames/<%= p.soul_id %>">voir sa fiche</a><% } %>
-                  </span>
-                </div>
+              <li style="padding:6px 0; border-bottom:1px solid var(--border);">
+                <div class="message-content" style="margin-top:0; white-space:normal;">📍 <strong><%= p.name %></strong><% if (p.saved) { %> <span class="badge-answered">Sauvé(e) 🙌</span><% } %><% if (p.soul_id) { %> <a href="/ames/<%= p.soul_id %>">voir sa fiche</a><% } %><% if (p.notes) { %> — <%= p.notes %><% } %><div class="muted" style="font-size:0.78rem; margin-top:2px;">Évangélisé(e) : <%= p.evangelized ? 1 : 0 %> · Sauvé(e) : <%= p.saved ? 1 : 0 %> · Tel : <%= p.phone || '0' %> · Invité(e) : <%= p.invited_church ? 1 : 0 %></div></div>
               </li>
             <% }) %>
           </ul>

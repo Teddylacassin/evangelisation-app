@@ -32,37 +32,44 @@
     <p class="empty">Aucun rapport pour l'instant. Sois le premier à partager ta sortie !</p>
   <% } %>
   <% reports.forEach(function(r) { %>
-    <div class="prayer-card">
-      <div class="prayer-meta">
-        <strong><%= r.user_name %></strong>
-        <span class="muted"><%= r.report_date %><% if (r.location) { %> — <%= r.location %><% } %></span>
+    <% const savedCount = r.people ? r.people.filter(function(p){ return p.saved; }).length : 0; %>
+    <details class="prayer-card">
+      <summary style="cursor:pointer; font-weight:600; list-style:revert;">
+        Rapport du <%= r.report_date.split('-').reverse().join('/') %>
+        <span class="muted" style="font-weight:normal;">
+          <% if (r.location) { %>— <%= r.location %><% } %>
+          · <%= r.user_name %>
+          <% if (savedCount > 0) { %> · <span class="badge-answered" style="font-weight:normal;">🙌 <%= savedCount %></span><% } %>
+        </span>
+      </summary>
+      <div style="margin-top:12px;">
+        <% if (r.presence) { %><p class="muted" style="margin:0 0 10px;">Présence : <%= r.presence %></p><% } %>
+        <% if (r.people && r.people.length > 0) { %>
+          <ul class="message-history">
+            <% r.people.forEach(function(p) { %>
+              <li>
+                <div class="message-content">
+                  📍 <strong><%= p.name %></strong><% if (p.saved) { %> <span class="badge-answered">Sauvé(e) 🙌</span><% } %>
+                  <% if (p.notes) { %><br><%= p.notes %><% } %>
+                  <br><span class="muted">
+                    Âmes évangélisées : <%= p.evangelized ? 1 : 0 %> ·
+                    Âmes sauvées : <%= p.saved ? 1 : 0 %> ·
+                    Numéro de tel : <%= p.phone || '0' %> ·
+                    Invité(e) à l'église : <%= p.invited_church ? 1 : 0 %>
+                    <% if (p.soul_id) { %> · <a href="/ames/<%= p.soul_id %>">voir sa fiche</a><% } %>
+                  </span>
+                </div>
+              </li>
+            <% }) %>
+          </ul>
+        <% } %>
+        <% if (r.user_id === currentUser.id) { %>
+          <form method="POST" action="/rapports/<%= r.id %>/supprimer" onsubmit="return confirm('Supprimer ce rapport ?');" style="margin-top:8px;">
+            <button class="btn btn-small btn-danger" type="submit">Supprimer</button>
+          </form>
+        <% } %>
       </div>
-      <% if (r.presence) { %><p class="muted" style="margin:0 0 10px;">Présence : <%= r.presence %></p><% } %>
-      <% if (r.people && r.people.length > 0) { %>
-        <ul class="message-history">
-          <% r.people.forEach(function(p) { %>
-            <li>
-              <div class="message-content">
-                📍 <strong><%= p.name %></strong><% if (p.saved) { %> <span class="badge-answered">Sauvé(e) 🙌</span><% } %>
-                <% if (p.notes) { %><br><%= p.notes %><% } %>
-                <br><span class="muted">
-                  Âmes évangélisées : <%= p.evangelized ? 1 : 0 %> ·
-                  Âmes sauvées : <%= p.saved ? 1 : 0 %> ·
-                  Numéro de tel : <%= p.phone || '0' %> ·
-                  Invité(e) à l'église : <%= p.invited_church ? 1 : 0 %>
-                  <% if (p.soul_id) { %> · <a href="/ames/<%= p.soul_id %>">voir sa fiche</a><% } %>
-                </span>
-              </div>
-            </li>
-          <% }) %>
-        </ul>
-      <% } %>
-      <% if (r.user_id === currentUser.id) { %>
-        <form method="POST" action="/rapports/<%= r.id %>/supprimer" onsubmit="return confirm('Supprimer ce rapport ?');" style="margin-top:8px;">
-          <button class="btn btn-small btn-danger" type="submit">Supprimer</button>
-        </form>
-      <% } %>
-    </div>
+    </details>
   <% }) %>
 </section>
 

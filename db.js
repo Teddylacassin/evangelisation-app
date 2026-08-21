@@ -149,6 +149,32 @@ async function initDb() {
       created_by INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS field_checkins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      neighborhood TEXT NOT NULL,
+      started_at TEXT NOT NULL DEFAULT (datetime('now')),
+      ended_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS planned_outings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      outing_date TEXT NOT NULL,
+      location TEXT NOT NULL,
+      notes TEXT,
+      created_by INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS outing_participants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      outing_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(outing_id, user_id),
+      FOREIGN KEY (outing_id) REFERENCES planned_outings(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`
   ], 'write');
 

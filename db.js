@@ -133,6 +133,22 @@ async function initDb() {
       FOREIGN KEY (lead_id) REFERENCES users(id) ON DELETE SET NULL,
       FOREIGN KEY (colead_id) REFERENCES users(id) ON DELETE SET NULL,
       FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS house_cells (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      neighborhood TEXT NOT NULL,
+      meeting_day TEXT,
+      meeting_time TEXT,
+      description TEXT,
+      pilot_name TEXT NOT NULL,
+      pilot_phone TEXT NOT NULL,
+      copilot_name TEXT,
+      copilot_phone TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_by INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     )`
   ], 'write');
 

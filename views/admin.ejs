@@ -83,6 +83,75 @@
 </section>
 
 <section class="panel">
+  <h2>🏠 Cellules de maison</h2>
+  <p class="muted">Ces cellules apparaissent sur la page publique <code>/cellules</code> — celle vers laquelle pointe le QR code de vos cartes d'invitation. Seuls le quartier et les contacts WhatsApp du pilote / co-pilote sont visibles publiquement, jamais l'adresse.</p>
+  <form method="POST" action="/admin/cellules" class="stacked-form">
+    <div class="form-row">
+      <label>Nom de la cellule
+        <input type="text" name="name" placeholder="Ex : Cellule Outremeuse" required>
+      </label>
+      <label>Quartier
+        <input type="text" name="neighborhood" placeholder="Ex : Outremeuse, Liège" required>
+      </label>
+    </div>
+    <div class="form-row">
+      <label>Jour
+        <input type="text" name="meeting_day" placeholder="Ex : Mercredi">
+      </label>
+      <label>Heure
+        <input type="text" name="meeting_time" placeholder="Ex : 19h30">
+      </label>
+    </div>
+    <label>Description courte
+      <textarea name="description" rows="2" placeholder="Ex : Une ambiance conviviale, ouverte à tous, en français."></textarea>
+    </label>
+    <div class="form-row">
+      <label>Nom du pilote
+        <input type="text" name="pilot_name" required>
+      </label>
+      <label>Téléphone du pilote (WhatsApp)
+        <input type="tel" name="pilot_phone" placeholder="+32 4XX XX XX XX" required>
+      </label>
+    </div>
+    <div class="form-row">
+      <label>Nom du co-pilote (optionnel)
+        <input type="text" name="copilot_name">
+      </label>
+      <label>Téléphone du co-pilote (optionnel)
+        <input type="tel" name="copilot_phone" placeholder="+32 4XX XX XX XX">
+      </label>
+    </div>
+    <button class="btn btn-primary" type="submit">Ajouter la cellule</button>
+  </form>
+
+  <% if (houseCells.length === 0) { %>
+    <p class="empty" style="margin-top:16px;">Aucune cellule de maison enregistrée pour l'instant.</p>
+  <% } else { %>
+    <ul class="message-history" style="margin-top:16px;">
+      <% houseCells.forEach(function(c) { %>
+        <li>
+          <div class="message-meta">
+            <%= c.neighborhood %><% if (c.meeting_day) { %> · <%= c.meeting_day %><% } %><% if (c.meeting_time) { %> <%= c.meeting_time %><% } %>
+            <% if (!c.active) { %> · <span style="color:var(--danger); font-weight:700;">Fermée</span><% } %>
+          </div>
+          <div class="message-content">
+            <strong><%= c.name %></strong> — Pilote : <%= c.pilot_name %> (<%= c.pilot_phone %>)<% if (c.copilot_name) { %> · Co-pilote : <%= c.copilot_name %> (<%= c.copilot_phone %>)<% } %>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <form method="POST" action="/admin/cellules/<%= c.id %>/toggle">
+              <button class="btn btn-small" type="submit"><%= c.active ? 'Fermer temporairement' : 'Réouvrir' %></button>
+            </form>
+            <form method="POST" action="/admin/cellules/<%= c.id %>/supprimer" onsubmit="return confirm('Supprimer définitivement cette cellule ?');">
+              <button class="btn btn-small btn-danger" type="submit">Supprimer</button>
+            </form>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<section class="panel">
   <h2>Annonces publiées</h2>
   <% if (announcements.length === 0) { %>
     <p class="empty">Aucune annonce publiée pour l'instant.</p>

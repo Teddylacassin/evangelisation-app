@@ -1,0 +1,102 @@
+<%- include('partials/header', { title: 'Carte des missions' }) %>
+
+<div class="page-head">
+  <h1>🗺️ Carte des missions</h1>
+</div>
+
+<section class="panel">
+  <h2>🔥 Sur le terrain maintenant</h2>
+  <% if (activeCheckins.length === 0) { %>
+    <p class="empty">Personne n'est déclaré sur le terrain pour l'instant.</p>
+  <% } else { %>
+    <p class="muted" style="margin-top:-8px;">📍 <%= activeCheckins.length %> personne<%= activeCheckins.length > 1 ? 's' : '' %> évangélise<%= activeCheckins.length > 1 ? 'nt' : '' %> actuellement</p>
+    <ul class="soul-mini-list">
+      <% activeCheckins.forEach(function(c) { %>
+        <li>
+          <span class="status-pill" style="background:var(--gold);">🔥 <%= c.user_name %></span>
+          <span class="muted">— <%= c.neighborhood %></span>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+
+  <form method="POST" action="/missions/terrain" class="stacked-form" style="margin-top:16px;">
+    <% if (myActiveCheckin) { %>
+      <p class="muted" style="margin:0;">Tu es déclaré sur le terrain à <strong><%= myActiveCheckin.neighborhood %></strong> depuis <%= myActiveCheckin.started_at %>.</p>
+      <button class="btn btn-danger" type="submit">Je quitte le terrain</button>
+    <% } else { %>
+      <label>Où évangélises-tu ?
+        <input type="text" name="neighborhood" placeholder="Ex : Outremeuse, Liège" required>
+      </label>
+      <button class="btn btn-active" type="submit">🔥 Je suis sur le terrain</button>
+    <% } %>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>🏠 Cellules qui se réunissent aujourd'hui (<%= todayName %>)</h2>
+  <% if (cellsToday.length === 0) { %>
+    <p class="empty">Aucune cellule ne se réunit aujourd'hui.</p>
+  <% } else { %>
+    <ul class="message-history">
+      <% cellsToday.forEach(function(c) { %>
+        <li>
+          <div class="message-meta">📍 <%= c.neighborhood %><% if (c.meeting_time) { %> · <%= c.meeting_time %><% } %></div>
+          <div class="message-content"><strong><%= c.name %></strong><% if (c.description) { %> — <%= c.description %><% } %></div>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<section class="panel">
+  <h2>📅 Sorties d'évangélisation prévues</h2>
+
+  <form method="POST" action="/missions/sorties" class="stacked-form">
+    <div class="form-row">
+      <label>Date
+        <input type="date" name="outing_date" required>
+      </label>
+      <label>Lieu
+        <input type="text" name="location" placeholder="Ex : Place Saint-Lambert" required>
+      </label>
+    </div>
+    <label>Notes (optionnel)
+      <textarea name="notes" rows="2" placeholder="Ex : RDV 9h30 devant la fontaine"></textarea>
+    </label>
+    <button class="btn btn-primary" type="submit">Programmer la sortie</button>
+  </form>
+
+  <% if (outings.length === 0) { %>
+    <p class="empty" style="margin-top:16px;">Aucune sortie programmée pour l'instant.</p>
+  <% } else { %>
+    <ul class="message-history" style="margin-top:16px;">
+      <% outings.forEach(function(o) { %>
+        <li>
+          <div class="message-meta">
+            <%= o.outing_date %> · 📍 <%= o.location %> · <%= o.participants.length %> participant<%= o.participants.length !== 1 ? 's' : '' %>
+          </div>
+          <div class="message-content">
+            <% if (o.notes) { %><%= o.notes %><br><% } %>
+            <span class="muted">Programmée par <%= o.creator_name %></span>
+            <% if (o.participants.length > 0) { %>
+              <br><span class="muted">Participants : <%= o.participants.map(function(p) { return p.user_name; }).join(', ') %></span>
+            <% } %>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <form method="POST" action="/missions/sorties/<%= o.id %>/participer">
+              <button class="btn btn-small <%= o.iParticipate ? 'btn-active' : 'btn-primary' %>" type="submit"><%= o.iParticipate ? '✓ Je participe' : 'Je participe' %></button>
+            </form>
+            <% if (o.created_by === currentUser.id) { %>
+              <form method="POST" action="/missions/sorties/<%= o.id %>/supprimer" onsubmit="return confirm('Supprimer cette sortie programmée ?');">
+                <button class="btn btn-small btn-danger" type="submit">Supprimer</button>
+              </form>
+            <% } %>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

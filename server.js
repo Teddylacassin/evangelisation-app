@@ -275,7 +275,8 @@ app.get('/admin', requireAdmin, h(async (req, res) => {
     LEFT JOIN users c ON c.id = pm.colead_id
     ORDER BY pm.meeting_date ASC
   `, []);
-  res.render('admin', { announcements, zoomLink, zoomLabel, teamMembers, prayerMeetings });
+  const houseCells = await all('SELECT * FROM house_cells ORDER BY active DESC, neighborhood ASC, name ASC', []);
+  res.render('admin', { announcements, zoomLink, zoomLabel, teamMembers, prayerMeetings, houseCells });
 }));
 
 app.post('/admin/annonces', requireAdmin, h(async (req, res) => {
@@ -312,6 +313,46 @@ app.post('/admin/reunions-priere', requireAdmin, h(async (req, res) => {
 app.post('/admin/reunions-priere/:id/supprimer', requireAdmin, h(async (req, res) => {
   await run('DELETE FROM prayer_meetings WHERE id = ?', [req.params.id]);
   res.redirect('/admin');
+}));
+
+// ---------- Cellules de maison ----------
+app.post('/admin/cellules', requireAdmin, h(async (req, res) => {
+  const { name, neighborhood, meeting_day, meeting_time, description, pilot_name, pilot_phone, copilot_name, copilot_phone } = req.body;
+  if (name && name.trim() && neighborhood && neighborhood.trim() && pilot_name && pilot_name.trim() && pilot_phone && pilot_phone.trim()) {
+    await run(
+      `INSERT INTO house_cells (name, neighborhood, meeting_day, meeting_time, description, pilot_name, pilot_phone, copilot_name, copilot_phone, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name.trim(), neighborhood.trim(), (meeting_day || '').trim() || null, (meeting_time || '').trim() || null,
+       (description || '').trim() || null, pilot_name.trim(), pilot_phone.trim(),
+       (copilot_name || '').trim() || null, (copilot_phone || '').trim() || null, req.session.user.id]
+    );
+  }
+  res.redirect('/admin');
+}));
+
+app.post('/admin/cellules/:id/toggle', requireAdmin, h(async (req, res) => {
+  await run('UPDATE house_cells SET active = 1 - active WHERE id = ?', [req.params.id]);
+  res.redirect('/admin');
+}));
+
+app.post('/admin/cellules/:id/supprimer', requireAdmin, h(async (req, res) => {
+  await run('DELETE FROM house_cells WHERE id = ?', [req.params.id]);
+  res.redirect('/admin');
+}));
+
+// Page publique (pas de connexion requise) : accessible via le QR code des cartes
+// d'invitation. On n'affiche jamais d'adresse, seulement le quartier et un moyen
+// de contacter le pilote / co-pilote par WhatsApp, pour preserver l'intimite des
+// familles qui accueillent une cellule chez elles.
+app.get('/cellules', h(async (req, res) => {
+  const neighborhoods = await all(
+    `SELECT DISTINCT neighborhood FROM house_cells WHERE active = 1 ORDER BY neighborhood ASC`, []
+  );
+  const selected = (req.query.quartier || '').trim();
+  const cells = selected
+    ? await all(`SELECT * FROM house_cells WHERE active = 1 AND neighborhood = ? ORDER BY name ASC`, [selected])
+    : await all(`SELECT * FROM house_cells WHERE active = 1 ORDER BY neighborhood ASC, name ASC`, []);
+  res.render('cellules', { cells, neighborhoods, selected });
 }));
 
 // ---------- Ames ----------

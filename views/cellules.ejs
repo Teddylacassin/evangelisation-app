@@ -1,0 +1,52 @@
+<%- include('partials/header', { title: 'Cellules de maison' }) %>
+
+<div class="page-head">
+  <h1>🏠 Cellules de maison</h1>
+</div>
+
+<section class="panel">
+  <p style="margin:0;">Une cellule de maison, c'est un petit groupe qui se retrouve chaque semaine chez quelqu'un, pour partager un moment convivial, lire la Bible et prier ensemble. Trouve celle la plus proche de chez toi et prends contact directement avec le pilote — il te donnera l'adresse une fois que vous serez en contact.</p>
+</section>
+
+<section class="panel">
+  <form method="GET" action="/cellules" class="form-row" style="align-items:flex-end;">
+    <label>Filtrer par quartier
+      <select name="quartier" onchange="this.form.submit()">
+        <option value="">Tous les quartiers</option>
+        <% neighborhoods.forEach(function(n) { %>
+          <option value="<%= n.neighborhood %>" <%= selected === n.neighborhood ? 'selected' : '' %>><%= n.neighborhood %></option>
+        <% }) %>
+      </select>
+    </label>
+    <% if (selected) { %><a class="btn btn-small" href="/cellules">Réinitialiser</a><% } %>
+  </form>
+</section>
+
+<% if (cells.length === 0) { %>
+  <p class="empty">Aucune cellule disponible pour l'instant<% if (selected) { %> dans ce quartier<% } %>. Reviens un peu plus tard, ou essaie un autre quartier !</p>
+<% } else { %>
+<div class="soul-cards">
+  <% cells.forEach(function(c) { %>
+    <% const pilotDigits = (c.pilot_phone || '').replace(/[^\d+]/g, '').replace('+', ''); %>
+    <% const copilotDigits = (c.copilot_phone || '').replace(/[^\d+]/g, '').replace('+', ''); %>
+    <div class="soul-card">
+      <div class="soul-card-top">
+        <span class="status-pill" style="background:var(--primary);">📍 <%= c.neighborhood %></span>
+      </div>
+      <div class="soul-card-name"><%= c.name %></div>
+      <% if (c.meeting_day || c.meeting_time) { %>
+        <div class="soul-card-meta">🗓️ <%= c.meeting_day %><% if (c.meeting_day && c.meeting_time) { %>, <% } %><%= c.meeting_time %></div>
+      <% } %>
+      <% if (c.description) { %><p class="muted" style="margin:4px 0;"><%= c.description %></p><% } %>
+      <div class="send-actions" style="margin-top:8px;">
+        <a class="btn btn-whatsapp btn-small" target="_blank" href="https://wa.me/<%= pilotDigits %>?text=<%= encodeURIComponent('Bonjour ' + c.pilot_name + ', j\'ai vu la cellule ' + c.name + ' sur la page des cellules de maison et ça m\'intéresse !') %>">💬 Contacter le pilote</a>
+        <% if (c.copilot_name && copilotDigits) { %>
+          <a class="btn btn-small" target="_blank" href="https://wa.me/<%= copilotDigits %>?text=<%= encodeURIComponent('Bonjour ' + c.copilot_name + ', j\'ai vu la cellule ' + c.name + ' sur la page des cellules de maison et ça m\'intéresse !') %>">💬 Co-pilote</a>
+        <% } %>
+      </div>
+    </div>
+  <% }) %>
+</div>
+<% } %>
+
+<%- include('partials/footer') %>

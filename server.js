@@ -355,6 +355,95 @@ app.get('/cellules', h(async (req, res) => {
   res.render('cellules', { cells, neighborhoods, selected });
 }));
 
+// ---------- Carte des missions ----------
+// Outil de coordination interne pour l'equipe (connexion requise) : qui est sur
+// le terrain en ce moment, quelles cellules se reunissent aujourd'hui, et quelles
+// sorties sont planifiees a l'avance avec inscription. Rien de tout ca n'utilise
+// de GPS : le "terrain" est une simple auto-declaration (quartier saisi a la main).
+const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+
+app.get('/missions', requireAuth, h(async (req, res) => {
+  const uid = req.session.user.id;
+
+  const activeCheckins = await all(`
+    SELECT c.*, u.name as user_name FROM field_checkins c
+    JOIN users u ON u.id = c.user_id
+    WHERE c.ended_at IS NULL AND c.started_at > datetime('now', '-6 hours')
+    ORDER BY c.started_at DESC
+  `, []);
+  const myActiveCheckin = activeCheckins.find((c) => c.user_id === uid) || null;
+
+  const todayName = JOURS_FR[new Date().getDay()];
+  const allCells = await all('SELECT * FROM house_cells WHERE active = 1 ORDER BY neighborhood ASC, name ASC', []);
+  const cellsToday = allCells.filter((c) => (c.meeting_day || '').trim().toLowerCase() === todayName.toLowerCase());
+
+  const outings = await all(`
+    SELECT o.*, u.name as creator_name FROM planned_outings o
+    JOIN users u ON u.id = o.created_by
+    WHERE o.outing_date >= date('now')
+    ORDER BY o.outing_date ASC
+  `, []);
+  for (const o of outings) {
+    o.participants = await all(`
+      SELECT op.*, u.name as user_name FROM outing_participants op
+      JOIN users u ON u.id = op.user_id
+      WHERE op.outing_id = ?
+      ORDER BY u.name ASC
+    `, [o.id]);
+    o.iParticipate = o.participants.some((p) => p.user_id === uid);
+  }
+
+  res.render('missions', { activeCheckins, myActiveCheckin, todayName, cellsToday, outings });
+}));
+
+app.post('/missions/terrain', requireAuth, h(async (req, res) => {
+  const uid = req.session.user.id;
+  const active = await get(
+    `SELECT * FROM field_checkins WHERE user_id = ? AND ended_at IS NULL AND started_at > datetime('now', '-6 hours')`,
+    [uid]
+  );
+  if (active) {
+    await run(`UPDATE field_checkins SET ended_at = datetime('now') WHERE id = ?`, [active.id]);
+  } else {
+    const neighborhood = (req.body.neighborhood || '').trim();
+    if (neighborhood) {
+      await run('INSERT INTO field_checkins (user_id, neighborhood) VALUES (?, ?)', [uid, neighborhood]);
+    }
+  }
+  res.redirect('/missions');
+}));
+
+app.post('/missions/sorties', requireAuth, h(async (req, res) => {
+  const { outing_date, location, notes } = req.body;
+  if (outing_date && outing_date.trim() && location && location.trim()) {
+    await run(
+      'INSERT INTO planned_outings (outing_date, location, notes, created_by) VALUES (?, ?, ?, ?)',
+      [outing_date.trim(), location.trim(), (notes || '').trim() || null, req.session.user.id]
+    );
+  }
+  res.redirect('/missions');
+}));
+
+app.post('/missions/sorties/:id/participer', requireAuth, h(async (req, res) => {
+  const uid = req.session.user.id;
+  const oid = req.params.id;
+  const existing = await get('SELECT id FROM outing_participants WHERE outing_id = ? AND user_id = ?', [oid, uid]);
+  if (existing) {
+    await run('DELETE FROM outing_participants WHERE id = ?', [existing.id]);
+  } else {
+    await run('INSERT INTO outing_participants (outing_id, user_id) VALUES (?, ?)', [oid, uid]);
+  }
+  res.redirect('/missions');
+}));
+
+app.post('/missions/sorties/:id/supprimer', requireAuth, h(async (req, res) => {
+  const o = await get('SELECT * FROM planned_outings WHERE id = ?', [req.params.id]);
+  if (o && o.created_by === req.session.user.id) {
+    await run('DELETE FROM planned_outings WHERE id = ?', [o.id]);
+  }
+  res.redirect('/missions');
+}));
+
 // ---------- Ames ----------
 app.get('/ames', requireAuth, h(async (req, res) => {
   const uid = req.session.user.id;

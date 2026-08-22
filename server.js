@@ -21,6 +21,7 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
@@ -366,14 +367,13 @@ app.get('/invitation', requireAuth, (req, res) => {
 // ---------- Carte des missions ----------
 // Outil de coordination interne pour l'equipe (connexion requise) : qui est sur
 // le terrain en ce moment, quelles cellules se reunissent aujourd'hui, et quelles
-// sorties sont planifiees a l'avance avec inscription. Rien de tout ca n'utilise
-// de GPS : le "terrain" est une simple auto-declaration (quartier saisi a la main).
+// sorties sont planifiees a l'avance avec inscription.
 const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 // Liste fermee de quartiers de Liege, chacun associe a un point approximatif sur
-// la carte. On ne demande jamais de position GPS ni d'adresse : les gens choisissent
-// simplement leur quartier dans cette liste, ce qui suffit a situer une sortie ou un
-// check-in "terrain" sur la carte sans jamais reveler une position exacte.
+// la carte. Sert de repli quand une personne n'a pas partage sa position GPS en
+// direct (ou l'a refusee) : elle apparait alors approximativement dans son quartier
+// declare plutot qu'a une adresse exacte.
 const LIEGE_QUARTIERS = [
   { label: 'Centre-ville', lat: 50.6326, lng: 5.5797 },
   { label: 'Outremeuse', lat: 50.6423, lng: 5.5847 },
@@ -406,11 +406,50 @@ function jitter(quartier) {
   };
 }
 
+// Construit les points affiches sur la carte : si un missionnaire a partage sa
+// position GPS en direct (recue il y a moins de 2 minutes), on affiche cette
+// position exacte ; sinon on retombe sur le quartier declare (avec leger decalage
+// aleatoire). Les sorties prevues restent toujours au niveau du quartier.
+function buildMapPoints(activeCheckins, outings) {
+  const mapPoints = [];
+  activeCheckins.forEach((c) => {
+    if (c.has_live_position && c.lat != null && c.lng != null) {
+      mapPoints.push({
+        type: 'terrain',
+        live: true,
+        lat: c.lat,
+        lng: c.lng,
+        label: `🔥 ${c.user_name} — position en direct`
+      });
+      return;
+    }
+    const q = findQuartier(c.neighborhood);
+    if (!q) return;
+    const pos = jitter(q);
+    mapPoints.push({ type: 'terrain', live: false, lat: pos.lat, lng: pos.lng, label: `🔥 ${c.user_name} — ${c.neighborhood}` });
+  });
+  outings.forEach((o) => {
+    const q = findQuartier(o.neighborhood);
+    if (!q) return;
+    const pos = jitter(q);
+    mapPoints.push({
+      type: 'sortie',
+      live: false,
+      lat: pos.lat,
+      lng: pos.lng,
+      label: `📅 ${o.outing_date} — ${o.location} (${o.participants.length} participant${o.participants.length !== 1 ? 's' : ''})`
+    });
+  });
+  return mapPoints;
+}
+
 app.get('/missions', requireAuth, h(async (req, res) => {
   const uid = req.session.user.id;
 
   const activeCheckins = await all(`
-    SELECT c.*, u.name as user_name FROM field_checkins c
+    SELECT c.*, u.name as user_name,
+      CASE WHEN c.position_updated_at > datetime('now', '-2 minutes') THEN 1 ELSE 0 END as has_live_position
+    FROM field_checkins c
     JOIN users u ON u.id = c.user_id
     WHERE c.ended_at IS NULL AND c.started_at > datetime('now', '-6 hours')
     ORDER BY c.started_at DESC
@@ -437,28 +476,60 @@ app.get('/missions', requireAuth, h(async (req, res) => {
     o.iParticipate = o.participants.some((p) => p.user_id === uid);
   }
 
-  // On prepare les points de la carte cote serveur : un point approximatif (jitte)
-  // par personne sur le terrain, et un point par sortie a venir dont le quartier est connu.
-  const mapPoints = [];
-  activeCheckins.forEach((c) => {
-    const q = findQuartier(c.neighborhood);
-    if (!q) return;
-    const pos = jitter(q);
-    mapPoints.push({ type: 'terrain', lat: pos.lat, lng: pos.lng, label: `🔥 ${c.user_name} — ${c.neighborhood}` });
-  });
-  outings.forEach((o) => {
-    const q = findQuartier(o.neighborhood);
-    if (!q) return;
-    const pos = jitter(q);
-    mapPoints.push({
-      type: 'sortie',
-      lat: pos.lat,
-      lng: pos.lng,
-      label: `📅 ${o.outing_date} — ${o.location} (${o.participants.length} participant${o.participants.length !== 1 ? 's' : ''})`
-    });
-  });
+  // On prepare les points de la carte cote serveur : position en direct quand elle est
+  // fraiche, sinon un point approximatif (jitte) par personne sur le terrain, et un
+  // point par sortie a venir dont le quartier est connu.
+  const mapPoints = buildMapPoints(activeCheckins, outings);
 
   res.render('missions', { activeCheckins, myActiveCheckin, todayName, cellsToday, outings, LIEGE_QUARTIERS, mapPoints });
+}));
+
+app.post('/missions/position', requireAuth, h(async (req, res) => {
+  const uid = req.session.user.id;
+  const lat = Number(req.body.lat);
+  const lng = Number(req.body.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return res.status(400).json({ ok: false });
+  }
+  const active = await get(
+    `SELECT * FROM field_checkins WHERE user_id = ? AND ended_at IS NULL AND started_at > datetime('now', '-6 hours')`,
+    [uid]
+  );
+  if (!active) {
+    return res.status(409).json({ ok: false });
+  }
+  await run(
+    `UPDATE field_checkins SET lat = ?, lng = ?, position_updated_at = datetime('now') WHERE id = ?`,
+    [lat, lng, active.id]
+  );
+  res.json({ ok: true });
+}));
+
+app.get('/missions/live.json', requireAuth, h(async (req, res) => {
+  const activeCheckins = await all(`
+    SELECT c.*, u.name as user_name,
+      CASE WHEN c.position_updated_at > datetime('now', '-2 minutes') THEN 1 ELSE 0 END as has_live_position
+    FROM field_checkins c
+    JOIN users u ON u.id = c.user_id
+    WHERE c.ended_at IS NULL AND c.started_at > datetime('now', '-6 hours')
+    ORDER BY c.started_at DESC
+  `, []);
+  const outings = await all(`
+    SELECT o.*, u.name as creator_name FROM planned_outings o
+    JOIN users u ON u.id = o.created_by
+    WHERE o.outing_date >= date('now')
+    ORDER BY o.outing_date ASC
+  `, []);
+  for (const o of outings) {
+    o.participants = await all(`
+      SELECT op.*, u.name as user_name FROM outing_participants op
+      JOIN users u ON u.id = op.user_id
+      WHERE op.outing_id = ?
+      ORDER BY u.name ASC
+    `, [o.id]);
+  }
+  const mapPoints = buildMapPoints(activeCheckins, outings);
+  res.json({ activeCount: activeCheckins.length, mapPoints });
 }));
 
 app.post('/missions/terrain', requireAuth, h(async (req, res) => {

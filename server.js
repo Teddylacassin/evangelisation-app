@@ -362,6 +362,42 @@ app.get('/cellules', h(async (req, res) => {
 // de GPS : le "terrain" est une simple auto-declaration (quartier saisi a la main).
 const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
+// Liste fermee de quartiers de Liege, chacun associe a un point approximatif sur
+// la carte. On ne demande jamais de position GPS ni d'adresse : les gens choisissent
+// simplement leur quartier dans cette liste, ce qui suffit a situer une sortie ou un
+// check-in "terrain" sur la carte sans jamais reveler une position exacte.
+const LIEGE_QUARTIERS = [
+  { label: 'Centre-ville', lat: 50.6326, lng: 5.5797 },
+  { label: 'Outremeuse', lat: 50.6423, lng: 5.5847 },
+  { label: 'Guillemins', lat: 50.6247, lng: 5.5664 },
+  { label: 'Angleur', lat: 50.6106, lng: 5.6059 },
+  { label: 'Sainte-Marguerite', lat: 50.6469, lng: 5.5717 },
+  { label: 'Sainte-Walburge', lat: 50.6516, lng: 5.5588 },
+  { label: 'Jupille', lat: 50.6465, lng: 5.6349 },
+  { label: 'Chênée', lat: 50.6089, lng: 5.6216 },
+  { label: 'Grivegnée', lat: 50.6280, lng: 5.6188 },
+  { label: 'Bressoux', lat: 50.6435, lng: 5.6106 },
+  { label: 'Rocourt', lat: 50.6737, lng: 5.5525 },
+  { label: 'Glain', lat: 50.6544, lng: 5.5341 },
+  { label: 'Droixhe', lat: 50.6499, lng: 5.6033 },
+  { label: 'Longdoz', lat: 50.6367, lng: 5.5875 },
+  { label: 'Fétinne', lat: 50.6321, lng: 5.5977 }
+];
+
+function findQuartier(label) {
+  return LIEGE_QUARTIERS.find((q) => q.label === (label || '').trim()) || null;
+}
+
+// Ajoute un leger decalage aleatoire (quelques centaines de metres) autour du point
+// central du quartier, pour que plusieurs personnes dans le meme quartier n'apparaissent
+// jamais exactement au meme endroit ni au centre exact du quartier.
+function jitter(quartier) {
+  return {
+    lat: quartier.lat + (Math.random() - 0.5) * 0.008,
+    lng: quartier.lng + (Math.random() - 0.5) * 0.012
+  };
+}
+
 app.get('/missions', requireAuth, h(async (req, res) => {
   const uid = req.session.user.id;
 
@@ -393,7 +429,28 @@ app.get('/missions', requireAuth, h(async (req, res) => {
     o.iParticipate = o.participants.some((p) => p.user_id === uid);
   }
 
-  res.render('missions', { activeCheckins, myActiveCheckin, todayName, cellsToday, outings });
+  // On prepare les points de la carte cote serveur : un point approximatif (jitte)
+  // par personne sur le terrain, et un point par sortie a venir dont le quartier est connu.
+  const mapPoints = [];
+  activeCheckins.forEach((c) => {
+    const q = findQuartier(c.neighborhood);
+    if (!q) return;
+    const pos = jitter(q);
+    mapPoints.push({ type: 'terrain', lat: pos.lat, lng: pos.lng, label: `🔥 ${c.user_name} — ${c.neighborhood}` });
+  });
+  outings.forEach((o) => {
+    const q = findQuartier(o.neighborhood);
+    if (!q) return;
+    const pos = jitter(q);
+    mapPoints.push({
+      type: 'sortie',
+      lat: pos.lat,
+      lng: pos.lng,
+      label: `📅 ${o.outing_date} — ${o.location} (${o.participants.length} participant${o.participants.length !== 1 ? 's' : ''})`
+    });
+  });
+
+  res.render('missions', { activeCheckins, myActiveCheckin, todayName, cellsToday, outings, LIEGE_QUARTIERS, mapPoints });
 }));
 
 app.post('/missions/terrain', requireAuth, h(async (req, res) => {
@@ -406,7 +463,7 @@ app.post('/missions/terrain', requireAuth, h(async (req, res) => {
     await run(`UPDATE field_checkins SET ended_at = datetime('now') WHERE id = ?`, [active.id]);
   } else {
     const neighborhood = (req.body.neighborhood || '').trim();
-    if (neighborhood) {
+    if (neighborhood && findQuartier(neighborhood)) {
       await run('INSERT INTO field_checkins (user_id, neighborhood) VALUES (?, ?)', [uid, neighborhood]);
     }
   }
@@ -414,11 +471,12 @@ app.post('/missions/terrain', requireAuth, h(async (req, res) => {
 }));
 
 app.post('/missions/sorties', requireAuth, h(async (req, res) => {
-  const { outing_date, location, notes } = req.body;
+  const { outing_date, location, neighborhood, notes } = req.body;
   if (outing_date && outing_date.trim() && location && location.trim()) {
+    const validNeighborhood = neighborhood && findQuartier(neighborhood) ? neighborhood.trim() : null;
     await run(
-      'INSERT INTO planned_outings (outing_date, location, notes, created_by) VALUES (?, ?, ?, ?)',
-      [outing_date.trim(), location.trim(), (notes || '').trim() || null, req.session.user.id]
+      'INSERT INTO planned_outings (outing_date, location, neighborhood, notes, created_by) VALUES (?, ?, ?, ?, ?)',
+      [outing_date.trim(), location.trim(), validNeighborhood, (notes || '').trim() || null, req.session.user.id]
     );
   }
   res.redirect('/missions');

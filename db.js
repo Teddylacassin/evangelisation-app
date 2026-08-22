@@ -185,7 +185,11 @@ async function initDb() {
   // de cette fonctionnalite).
   const alterations = [
     "ALTER TABLE users ADD COLUMN reset_token TEXT",
-    "ALTER TABLE users ADD COLUMN reset_token_expires TEXT"
+    "ALTER TABLE users ADD COLUMN reset_token_expires TEXT",
+    "ALTER TABLE planned_outings ADD COLUMN neighborhood TEXT",
+    "ALTER TABLE field_checkins ADD COLUMN lat REAL",
+    "ALTER TABLE field_checkins ADD COLUMN lng REAL",
+    "ALTER TABLE field_checkins ADD COLUMN position_updated_at TEXT"
   ];
   for (const sql of alterations) {
     try {

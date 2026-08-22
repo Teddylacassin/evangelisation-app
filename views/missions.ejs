@@ -1,15 +1,26 @@
 <%- include('partials/header', { title: 'Carte des missions' }) %>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 
 <div class="page-head">
   <h1>🗺️ Carte des missions</h1>
 </div>
+
+<div class="stat-card highlight" style="max-width:360px; margin-bottom:20px;">
+  <div class="stat-value">🟢 <%= activeCheckins.length %></div>
+  <div class="stat-label">missionnaire<%= activeCheckins.length !== 1 ? 's' : '' %> actuellement à Liège</div>
+</div>
+
+<section class="panel">
+  <h2>🗺️ Carte en direct</h2>
+  <p class="muted">Position approximative par quartier uniquement — jamais l'adresse exacte, pour préserver l'intimité de chacun. 🔥 = sur le terrain maintenant · 📅 = sortie prévue.</p>
+  <div id="mission-map" style="height:420px; border-radius:12px; margin-top:12px;"></div>
+</section>
 
 <section class="panel">
   <h2>🔥 Sur le terrain maintenant</h2>
   <% if (activeCheckins.length === 0) { %>
     <p class="empty">Personne n'est déclaré sur le terrain pour l'instant.</p>
   <% } else { %>
-    <p class="muted" style="margin-top:-8px;">📍 <%= activeCheckins.length %> personne<%= activeCheckins.length > 1 ? 's' : '' %> évangélise<%= activeCheckins.length > 1 ? 'nt' : '' %> actuellement</p>
     <ul class="soul-mini-list">
       <% activeCheckins.forEach(function(c) { %>
         <li>
@@ -25,8 +36,13 @@
       <p class="muted" style="margin:0;">Tu es déclaré sur le terrain à <strong><%= myActiveCheckin.neighborhood %></strong> depuis <%= myActiveCheckin.started_at %>.</p>
       <button class="btn btn-danger" type="submit">Je quitte le terrain</button>
     <% } else { %>
-      <label>Où évangélises-tu ?
-        <input type="text" name="neighborhood" placeholder="Ex : Outremeuse, Liège" required>
+      <label>Dans quel quartier évangélises-tu ?
+        <select name="neighborhood" required>
+          <option value="">— Choisis ton quartier —</option>
+          <% LIEGE_QUARTIERS.forEach(function(q) { %>
+            <option value="<%= q.label %>"><%= q.label %></option>
+          <% }) %>
+        </select>
       </label>
       <button class="btn btn-active" type="submit">🔥 Je suis sur le terrain</button>
     <% } %>
@@ -57,10 +73,18 @@
       <label>Date
         <input type="date" name="outing_date" required>
       </label>
-      <label>Lieu
-        <input type="text" name="location" placeholder="Ex : Place Saint-Lambert" required>
+      <label>Quartier
+        <select name="neighborhood">
+          <option value="">— Choisis un quartier —</option>
+          <% LIEGE_QUARTIERS.forEach(function(q) { %>
+            <option value="<%= q.label %>"><%= q.label %></option>
+          <% }) %>
+        </select>
       </label>
     </div>
+    <label>Lieu précis
+      <input type="text" name="location" placeholder="Ex : Place Saint-Lambert" required>
+    </label>
     <label>Notes (optionnel)
       <textarea name="notes" rows="2" placeholder="Ex : RDV 9h30 devant la fontaine"></textarea>
     </label>
@@ -74,7 +98,7 @@
       <% outings.forEach(function(o) { %>
         <li>
           <div class="message-meta">
-            <%= o.outing_date %> · 📍 <%= o.location %> · <%= o.participants.length %> participant<%= o.participants.length !== 1 ? 's' : '' %>
+            <%= o.outing_date %> · 📍 <%= o.location %><% if (o.neighborhood) { %> (<%= o.neighborhood %>)<% } %> · <%= o.participants.length %> participant<%= o.participants.length !== 1 ? 's' : '' %>
           </div>
           <div class="message-content">
             <% if (o.notes) { %><%= o.notes %><br><% } %>
@@ -98,5 +122,28 @@
     </ul>
   <% } %>
 </section>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  (function () {
+    var map = L.map('mission-map').setView([50.6326, 5.5797], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    var points = <%- JSON.stringify(mapPoints) %>;
+    points.forEach(function (p) {
+      var color = p.type === 'terrain' ? '#d4a53c' : '#2f6b4f';
+      L.circleMarker([p.lat, p.lng], {
+        radius: 10,
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.75,
+        weight: 2
+      }).addTo(map).bindPopup(p.label);
+    });
+  })();
+</script>
 
 <%- include('partials/footer') %>

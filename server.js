@@ -355,6 +355,14 @@ app.get('/cellules', h(async (req, res) => {
   res.render('cellules', { cells, neighborhoods, selected });
 }));
 
+// Page interne (connexion requise) qui affiche le QR code des cartes d'invitation
+// directement dans l'appli : chaque gagneur d'ame peut l'ouvrir sur son telephone
+// et le faire scanner par la personne qu'il rencontre, sans avoir besoin d'une
+// carte imprimee sur lui.
+app.get('/invitation', requireAuth, (req, res) => {
+  res.render('invitation');
+});
+
 // ---------- Carte des missions ----------
 // Outil de coordination interne pour l'equipe (connexion requise) : qui est sur
 // le terrain en ce moment, quelles cellules se reunissent aujourd'hui, et quelles

@@ -6,14 +6,14 @@
 </div>
 
 <div class="stat-card highlight" style="max-width:360px; margin-bottom:20px;">
-  <div class="stat-value">🟢 <%= activeCheckins.length %></div>
+  <div class="stat-value">🟢 <span id="active-count"><%= activeCheckins.length %></span></div>
   <div class="stat-label">missionnaire<%= activeCheckins.length !== 1 ? 's' : '' %> actuellement à Liège</div>
 </div>
 
 <section class="panel">
   <h2>🗺️ Carte en direct</h2>
-  <p class="muted">Position approximative par quartier uniquement — jamais l'adresse exacte, pour préserver l'intimité de chacun. 🔥 = sur le terrain maintenant · 📅 = sortie prévue.</p>
-  <div id="mission-map" style="height:420px; border-radius:12px; margin-top:12px;"></div>
+  <p class="muted">Quand tu es sur le terrain, ta position GPS exacte est partagée en direct avec l'équipe tant que tu restes déclaré — elle disparaît dès que tu quittes le terrain. Les sorties prévues restent affichées par quartier, sans adresse exacte. 🔴 = position en direct · 🟡 = quartier déclaré · 🟢 = sortie prévue.</p>
+  <div id="mission-map" style="height:560px; border-radius:12px; margin-top:12px;"></div>
 </section>
 
 <section class="panel">
@@ -44,6 +44,7 @@
           <% }) %>
         </select>
       </label>
+      <p class="muted" style="font-size:0.85rem; margin:4px 0 0;">En te déclarant sur le terrain, ta position GPS exacte sera partagée en direct avec l'équipe (si tu acceptes la demande de localisation de ton téléphone) tant que tu restes déclaré.</p>
       <button class="btn btn-active" type="submit">🔥 Je suis sur le terrain</button>
     <% } %>
   </form>
@@ -132,17 +133,68 @@
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map);
 
-    var points = <%- JSON.stringify(mapPoints) %>;
-    points.forEach(function (p) {
-      var color = p.type === 'terrain' ? '#d4a53c' : '#2f6b4f';
-      L.circleMarker([p.lat, p.lng], {
-        radius: 10,
-        color: color,
-        fillColor: color,
-        fillOpacity: 0.75,
-        weight: 2
-      }).addTo(map).bindPopup(p.label);
-    });
+    var markers = L.layerGroup().addTo(map);
+    var counterEl = document.getElementById('active-count');
+
+    function colorFor(p) {
+      if (p.type === 'sortie') return '#2f6b4f';
+      return p.live ? '#c0392b' : '#d4a53c';
+    }
+
+    function drawPoints(points) {
+      markers.clearLayers();
+      points.forEach(function (p) {
+        var color = colorFor(p);
+        L.circleMarker([p.lat, p.lng], {
+          radius: p.live ? 11 : 10,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.8,
+          weight: p.live ? 3 : 2
+        }).addTo(markers).bindPopup(p.label);
+      });
+      if (points.length > 0) {
+        var bounds = L.latLngBounds(points.map(function (p) { return [p.lat, p.lng]; }));
+        map.fitBounds(bounds.pad(0.25), { maxZoom: 15 });
+      }
+    }
+
+    drawPoints(<%- JSON.stringify(mapPoints) %>);
+
+    // Rafraichit la carte et le compteur toutes les 12 secondes pour voir les
+    // positions en direct des autres missionnaires evoluer, sans recharger la page.
+    function refreshLive() {
+      fetch('/missions/live.json')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          drawPoints(data.mapPoints);
+          if (counterEl) counterEl.textContent = data.activeCount;
+        })
+        .catch(function () {});
+    }
+    setInterval(refreshLive, 12000);
+
+    <% if (myActiveCheckin) { %>
+    // Je suis declare sur le terrain : je partage ma position GPS exacte en direct
+    // tant que je reste sur cette page et declare, pour que l'equipe puisse me situer.
+    if (navigator.geolocation) {
+      function sharePosition() {
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            fetch('/missions/position', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+            }).catch(function () {});
+          },
+          function () { /* permission refusee : on retombe simplement sur le quartier declare */ },
+          { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
+        );
+      }
+      sharePosition();
+      setInterval(sharePosition, 15000);
+    }
+    <% } %>
   })();
 </script>
 

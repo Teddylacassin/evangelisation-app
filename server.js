@@ -1099,7 +1099,98 @@ app.get('/statistiques', requireAuth, h(async (req, res) => {
     ORDER BY saved DESC, evangelized DESC, sorties DESC
   `, []);
 
-  res.render('statistics', { period, totals, ranking });
+  let cellDateFilter = '';
+  let cellPrevFilter = null;
+  if (period === 'semaine') {
+    cellDateFilter = "AND cr.meeting_date >= date('now','-7 days')";
+    cellPrevFilter = "AND cr.meeting_date >= date('now','-14 days') AND cr.meeting_date < date('now','-7 days')";
+  } else if (period === 'mois') {
+    cellDateFilter = "AND cr.meeting_date >= date('now','-30 days')";
+    cellPrevFilter = "AND cr.meeting_date >= date('now','-60 days') AND cr.meeting_date < date('now','-30 days')";
+  }
+
+  const cellTotals = await get(`
+    SELECT
+      (SELECT COUNT(*) FROM house_cells WHERE active = 1) as active_cells,
+      COUNT(cr.id) as reports_count,
+      COALESCE(SUM(cr.attendance_count),0) as attendance_total
+    FROM cell_reports cr
+    WHERE 1=1 ${cellDateFilter}
+  `, []);
+  cellTotals.avg_attendance = cellTotals.reports_count > 0
+    ? Math.round((cellTotals.attendance_total / cellTotals.reports_count) * 10) / 10
+    : null;
+
+  let cellTrend = null;
+  if (cellPrevFilter) {
+    const prevCellTotals = await get(`
+      SELECT COUNT(cr.id) as reports_count, COALESCE(SUM(cr.attendance_count),0) as attendance_total
+      FROM cell_reports cr
+      WHERE 1=1 ${cellPrevFilter}
+    `, []);
+    cellTrend = {
+      reports_delta: cellTotals.reports_count - prevCellTotals.reports_count,
+      attendance_delta: cellTotals.attendance_total - prevCellTotals.attendance_total
+    };
+  }
+
+  const cellRows = await all(`
+    SELECT hc.id, hc.name, hc.neighborhood,
+      COUNT(cr.id) as reports_count,
+      COALESCE(SUM(cr.attendance_count),0) as attendance_total,
+      (SELECT MAX(cr2.meeting_date) FROM cell_reports cr2 WHERE cr2.cell_id = hc.id) as last_report_date
+    FROM house_cells hc
+    LEFT JOIN cell_reports cr ON cr.cell_id = hc.id ${cellDateFilter}
+    WHERE hc.active = 1
+    GROUP BY hc.id
+    ORDER BY attendance_total DESC, reports_count DESC, hc.name ASC
+  `, []);
+  const now = new Date();
+  cellRows.forEach((c) => {
+    c.avg_attendance = c.reports_count > 0
+      ? Math.round((c.attendance_total / c.reports_count) * 10) / 10
+      : null;
+    if (c.last_report_date) {
+      c.days_since_last = Math.floor((now - new Date(c.last_report_date)) / (1000 * 60 * 60 * 24));
+      c.dormant = c.days_since_last > 60;
+    } else {
+      c.days_since_last = null;
+      c.dormant = true;
+    }
+  });
+  const dormantCount = cellRows.filter((c) => c.dormant).length;
+
+  let prayerMeetingFilter = '';
+  let prayerCreatedFilter = '';
+  let prayerSupportFilter = '';
+  if (period === 'semaine') {
+    prayerMeetingFilter = "AND pm.meeting_date >= date('now','-7 days')";
+    prayerCreatedFilter = "AND date(pr.created_at) >= date('now','-7 days')";
+    prayerSupportFilter = "AND date(ps.created_at) >= date('now','-7 days')";
+  } else if (period === 'mois') {
+    prayerMeetingFilter = "AND pm.meeting_date >= date('now','-30 days')";
+    prayerCreatedFilter = "AND date(pr.created_at) >= date('now','-30 days')";
+    prayerSupportFilter = "AND date(ps.created_at) >= date('now','-30 days')";
+  }
+
+  const prayerTotals = await get(`
+    SELECT
+      (SELECT COUNT(*) FROM prayer_meetings pm WHERE 1=1 ${prayerMeetingFilter}) as meetings_count,
+      (SELECT COUNT(*) FROM prayer_requests pr WHERE 1=1 ${prayerCreatedFilter}) as requests_count,
+      (SELECT COUNT(*) FROM prayer_requests pr WHERE pr.answered = 1 ${prayerCreatedFilter}) as answered_count,
+      (SELECT COUNT(*) FROM prayer_supports ps WHERE 1=1 ${prayerSupportFilter}) as supports_count
+  `, []);
+  prayerTotals.answer_rate = prayerTotals.requests_count > 0
+    ? Math.round((prayerTotals.answered_count / prayerTotals.requests_count) * 100)
+    : null;
+
+  const prayerPending = await get(`SELECT COUNT(*) as c FROM prayer_requests WHERE answered = 0`, []);
+
+  res.render('statistics', {
+    period, totals, ranking,
+    cellTotals, cellTrend, cellRows, dormantCount,
+    prayerTotals, prayerPendingCount: prayerPending.c
+  });
 }));
 
 // ---------- Mes objectifs ----------

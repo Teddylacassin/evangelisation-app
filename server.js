@@ -406,6 +406,33 @@ function jitter(quartier) {
   };
 }
 
+// Distance a vol d'oiseau (en metres) entre deux points GPS, via la formule de
+// Haversine. Utilise uniquement entre deux positions GPS en direct (jamais avec
+// un point approximatif de quartier, ce qui donnerait une distance trompeuse).
+function distanceMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Ajoute une distance approximative (en metres) entre "moi" et chaque autre
+// missionnaire actif, uniquement quand les deux partagent une position GPS en
+// direct fraiche. Sinon la distance reste inconnue (null) : on ne calcule jamais
+// de distance a partir d'un point de quartier approximatif.
+function addDistances(activeCheckins, myActiveCheckin) {
+  const canCompute = myActiveCheckin && myActiveCheckin.has_live_position && myActiveCheckin.lat != null && myActiveCheckin.lng != null;
+  activeCheckins.forEach((c) => {
+    if (canCompute && c.user_id !== myActiveCheckin.user_id && c.has_live_position && c.lat != null && c.lng != null) {
+      c.distance_m = Math.round(distanceMeters(myActiveCheckin.lat, myActiveCheckin.lng, c.lat, c.lng));
+    } else {
+      c.distance_m = null;
+    }
+  });
+}
+
 // Construit les points affiches sur la carte : si un missionnaire a partage sa
 // position GPS en direct (recue il y a moins de 2 minutes), on affiche cette
 // position exacte ; sinon on retombe sur le quartier declare (avec leger decalage
@@ -455,6 +482,7 @@ app.get('/missions', requireAuth, h(async (req, res) => {
     ORDER BY c.started_at DESC
   `, []);
   const myActiveCheckin = activeCheckins.find((c) => c.user_id === uid) || null;
+  addDistances(activeCheckins, myActiveCheckin);
 
   const todayName = JOURS_FR[new Date().getDay()];
   const allCells = await all('SELECT * FROM house_cells WHERE active = 1 ORDER BY neighborhood ASC, name ASC', []);
@@ -506,6 +534,7 @@ app.post('/missions/position', requireAuth, h(async (req, res) => {
 }));
 
 app.get('/missions/live.json', requireAuth, h(async (req, res) => {
+  const uid = req.session.user.id;
   const activeCheckins = await all(`
     SELECT c.*, u.name as user_name,
       CASE WHEN c.position_updated_at > datetime('now', '-2 minutes') THEN 1 ELSE 0 END as has_live_position
@@ -514,6 +543,9 @@ app.get('/missions/live.json', requireAuth, h(async (req, res) => {
     WHERE c.ended_at IS NULL AND c.started_at > datetime('now', '-6 hours')
     ORDER BY c.started_at DESC
   `, []);
+  const myActiveCheckin = activeCheckins.find((c) => c.user_id === uid) || null;
+  addDistances(activeCheckins, myActiveCheckin);
+
   const outings = await all(`
     SELECT o.*, u.name as creator_name FROM planned_outings o
     JOIN users u ON u.id = o.created_by
@@ -529,7 +561,12 @@ app.get('/missions/live.json', requireAuth, h(async (req, res) => {
     `, [o.id]);
   }
   const mapPoints = buildMapPoints(activeCheckins, outings);
-  res.json({ activeCount: activeCheckins.length, mapPoints });
+  const checkins = activeCheckins.map((c) => ({
+    user_name: c.user_name,
+    neighborhood: c.neighborhood,
+    distance_m: c.distance_m
+  }));
+  res.json({ activeCount: activeCheckins.length, mapPoints, checkins });
 }));
 
 app.post('/missions/terrain', requireAuth, h(async (req, res) => {

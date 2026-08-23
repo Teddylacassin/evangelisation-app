@@ -175,6 +175,26 @@ async function initDb() {
       UNIQUE(outing_id, user_id),
       FOREIGN KEY (outing_id) REFERENCES planned_outings(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS cell_participants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cell_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(cell_id, user_id),
+      FOREIGN KEY (cell_id) REFERENCES house_cells(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS cell_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cell_id INTEGER NOT NULL,
+      reported_by INTEGER NOT NULL,
+      meeting_date TEXT NOT NULL DEFAULT (date('now')),
+      attendance_count INTEGER,
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (cell_id) REFERENCES house_cells(id) ON DELETE CASCADE,
+      FOREIGN KEY (reported_by) REFERENCES users(id) ON DELETE CASCADE
     )`
   ], 'write');
 
@@ -191,7 +211,8 @@ async function initDb() {
     "ALTER TABLE field_checkins ADD COLUMN lng REAL",
     "ALTER TABLE field_checkins ADD COLUMN position_updated_at TEXT",
     "ALTER TABLE users ADD COLUMN last_seen_outings_at TEXT",
-    "ALTER TABLE users ADD COLUMN last_seen_prayer_at TEXT"
+    "ALTER TABLE users ADD COLUMN last_seen_prayer_at TEXT",
+    "ALTER TABLE souls ADD COLUMN cell_id INTEGER"
   ];
   for (const sql of alterations) {
     try {

@@ -189,7 +189,9 @@ async function initDb() {
     "ALTER TABLE planned_outings ADD COLUMN neighborhood TEXT",
     "ALTER TABLE field_checkins ADD COLUMN lat REAL",
     "ALTER TABLE field_checkins ADD COLUMN lng REAL",
-    "ALTER TABLE field_checkins ADD COLUMN position_updated_at TEXT"
+    "ALTER TABLE field_checkins ADD COLUMN position_updated_at TEXT",
+    "ALTER TABLE users ADD COLUMN last_seen_outings_at TEXT",
+    "ALTER TABLE users ADD COLUMN last_seen_prayer_at TEXT"
   ];
   for (const sql of alterations) {
     try {

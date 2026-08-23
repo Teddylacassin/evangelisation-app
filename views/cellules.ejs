@@ -5,6 +5,17 @@
   <h1>🏠 Cellules de maison</h1>
 </div>
 
+<% if (typeof rapportOk !== 'undefined' && rapportOk) { %>
+  <div class="panel" style="background:#eafaf0; border:1px solid #2f6b4f; padding:12px 16px; margin-bottom:20px;">
+    ✅ Merci, ton compte-rendu a bien été enregistré !
+  </div>
+<% } %>
+<% if (typeof rapportErreur !== 'undefined' && rapportErreur) { %>
+  <div class="panel" style="background:#fdecea; border:1px solid #c0392b; padding:12px 16px; margin-bottom:20px;">
+    ⚠️ Mot de passe incorrect — le compte-rendu n'a pas été enregistré.
+  </div>
+<% } %>
+
 <section class="panel">
   <p style="margin:0;">Une cellule de maison, c'est un petit groupe qui se retrouve chaque semaine chez quelqu'un, pour partager un moment convivial, lire la Bible et prier ensemble. Trouve celle la plus proche de chez toi et prends contact directement avec le pilote — il te donnera l'adresse une fois que vous serez en contact.</p>
 </section>
@@ -59,7 +70,7 @@
           <p class="muted" style="margin:10px 0 0; font-size:0.85rem;">🙋 <%= c.participantCount %> membre<%= c.participantCount !== 1 ? 's' : '' %> de l'équipe <%= c.participantCount !== 1 ? 'font' : 'fait' %> partie de cette cellule</p>
         <% } %>
         <% if (c.lastReport) { %>
-          <p class="muted" style="margin:6px 0 0; font-size:0.85rem;">📋 Dernier compte-rendu : <% if (c.lastReport.attendance_count != null) { %><%= c.lastReport.attendance_count %> présent<%= c.lastReport.attendance_count !== 1 ? 's' : '' %> · <% } %><%= c.lastReport.meeting_date %><% if (c.lastReport.note) { %> — <%= c.lastReport.note %><% } %></p>
+          <p class="muted" style="margin:6px 0 0; font-size:0.85rem;">📋 Dernier compte-rendu<% if (c.lastReport.reporter_name) { %> (<%= c.lastReport.reporter_name %>)<% } %> : <% if (c.lastReport.attendance_count != null) { %><%= c.lastReport.attendance_count %> présent<%= c.lastReport.attendance_count !== 1 ? 's' : '' %> · <% } %><%= c.lastReport.meeting_date %><% if (c.lastReport.note) { %> — <%= c.lastReport.note %><% } %></p>
         <% } %>
 
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
@@ -68,26 +79,32 @@
             <button class="btn btn-small <%= c.iParticipate ? 'btn-active' : 'btn-primary' %>" type="submit"><%= c.iParticipate ? '✓ Je fais partie de cette cellule' : 'Je fais partie de cette cellule' %></button>
           </form>
         </div>
-
-        <details style="margin-top:10px;">
-          <summary class="btn btn-small" style="display:inline-block; cursor:pointer;">📋 Ajouter un compte-rendu</summary>
-          <form method="POST" action="/cellules/<%= c.id %>/rapport" class="stacked-form" style="margin-top:10px;">
-            <input type="hidden" name="return_quartier" value="<%= selected %>">
-            <div class="form-row">
-              <label>Date de la rencontre
-                <input type="date" name="meeting_date" value="<%= new Date().toISOString().slice(0,10) %>">
-              </label>
-              <label>Nombre de présents
-                <input type="number" name="attendance_count" min="0" placeholder="Ex : 8">
-              </label>
-            </div>
-            <label>Note (optionnel)
-              <textarea name="note" rows="2" placeholder="Ex : beau temps de partage, une personne est venue pour la première fois"></textarea>
-            </label>
-            <button class="btn btn-small btn-primary" type="submit">Envoyer le compte-rendu</button>
-          </form>
-        </details>
       <% } %>
+
+      <details style="margin-top:10px;">
+        <summary class="btn btn-small" style="display:inline-block; cursor:pointer;">📋 Ajouter un compte-rendu</summary>
+        <form method="POST" action="/cellules/<%= c.id %>/rapport" class="stacked-form" style="margin-top:10px;">
+          <input type="hidden" name="return_quartier" value="<%= selected %>">
+          <div class="form-row">
+            <label>Date de la rencontre
+              <input type="date" name="meeting_date" value="<%= new Date().toISOString().slice(0,10) %>">
+            </label>
+            <label>Nombre de présents
+              <input type="number" name="attendance_count" min="0" placeholder="Ex : 8">
+            </label>
+          </div>
+          <label>Ton nom
+            <input type="text" name="reporter_name" placeholder="Ex : Marie Dupont" required>
+          </label>
+          <label>Note (optionnel)
+            <textarea name="note" rows="2" placeholder="Ex : beau temps de partage, une personne est venue pour la première fois"></textarea>
+          </label>
+          <label>Mot de passe
+            <input type="password" name="rapport_password" required>
+          </label>
+          <button class="btn btn-small btn-primary" type="submit">Envoyer le compte-rendu</button>
+        </form>
+      </details>
     </div>
   <% }) %>
 </div>

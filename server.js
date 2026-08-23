@@ -251,7 +251,7 @@ app.get('/dashboard', requireAuth, h(async (req, res) => {
     LIMIT 3
   `, []);
 
-  // Petit point d'alerte sur les blocs "Prochaine sortie" / "Prochain temps de priere" du
+  // Petit point d'alerte sur les onglets "Prochaines sorties" / "Temps de priere" du
   // tableau de bord : on regarde si une sortie ou un temps de priere a venir a ete
   // cree depuis la derniere fois que l'utilisateur a visite la page correspondante
   // (/missions ou /priere). Le point disparait des qu'il ouvre cette page.
@@ -393,7 +393,50 @@ app.get('/cellules', h(async (req, res) => {
   const cells = selected
     ? await all(`SELECT * FROM house_cells WHERE active = 1 AND neighborhood = ? ORDER BY name ASC`, [selected])
     : await all(`SELECT * FROM house_cells WHERE active = 1 ORDER BY neighborhood ASC, name ASC`, []);
-  res.render('cellules', { cells, neighborhoods, selected });
+
+  // Pour les membres connectes de l'equipe (visiteurs anonymes exclus) : combien
+  // font deja partie de chaque cellule, si "moi" en fais partie, et le dernier
+  // compte-rendu de rencontre, pour donner de la visibilite sur la vie des cellules.
+  const uid = req.session.user ? req.session.user.id : null;
+  for (const c of cells) {
+    const pc = await get('SELECT COUNT(*) as c FROM cell_participants WHERE cell_id = ?', [c.id]);
+    c.participantCount = pc.c;
+    c.iParticipate = uid ? !!(await get('SELECT 1 FROM cell_participants WHERE cell_id = ? AND user_id = ?', [c.id, uid])) : false;
+    c.lastReport = await get('SELECT * FROM cell_reports WHERE cell_id = ? ORDER BY meeting_date DESC, created_at DESC LIMIT 1', [c.id]);
+  }
+
+  const mapPoints = buildCellMapPoints(cells);
+
+  res.render('cellules', { cells, neighborhoods, selected, mapPoints });
+}));
+
+// Un membre de l'equipe indique qu'il fait (ou ne fait plus) partie d'une cellule.
+// Reserve aux personnes connectees : la page /cellules elle-meme reste publique.
+app.post('/cellules/:id/participer', requireAuth, h(async (req, res) => {
+  const uid = req.session.user.id;
+  const cellId = req.params.id;
+  const existing = await get('SELECT 1 FROM cell_participants WHERE cell_id = ? AND user_id = ?', [cellId, uid]);
+  if (existing) {
+    await run('DELETE FROM cell_participants WHERE cell_id = ? AND user_id = ?', [cellId, uid]);
+  } else {
+    await run('INSERT INTO cell_participants (cell_id, user_id) VALUES (?, ?)', [cellId, uid]);
+  }
+  const back = (req.body.return_quartier || '').trim();
+  res.redirect('/cellules' + (back ? '?quartier=' + encodeURIComponent(back) : '') + '#cellule-' + cellId);
+}));
+
+// Un membre de l'equipe (pas forcement le pilote) publie un petit compte-rendu
+// apres une rencontre, visible par toute l'equipe connectee sur /cellules.
+app.post('/cellules/:id/rapport', requireAuth, h(async (req, res) => {
+  const { meeting_date, attendance_count, note, return_quartier } = req.body;
+  const count = Number(attendance_count);
+  await run(
+    `INSERT INTO cell_reports (cell_id, reported_by, meeting_date, attendance_count, note)
+     VALUES (?, ?, COALESCE(NULLIF(?, ''), date('now')), ?, ?)`,
+    [req.params.id, req.session.user.id, meeting_date, Number.isFinite(count) ? count : null, (note || '').trim() || null]
+  );
+  const back = (return_quartier || '').trim();
+  res.redirect('/cellules' + (back ? '?quartier=' + encodeURIComponent(back) : '') + '#cellule-' + req.params.id);
 }));
 
 // Page interne (connexion requise) qui affiche le QR code des cartes d'invitation
@@ -407,13 +450,14 @@ app.get('/invitation', requireAuth, (req, res) => {
 // ---------- Carte des missions ----------
 // Outil de coordination interne pour l'equipe (connexion requise) : qui est sur
 // le terrain en ce moment, quelles cellules se reunissent aujourd'hui, et quelles
-// sorties sont planifiees a l'avance avec inscription.
+// sorties sont planifiees a l'avance avec inscription. Rien de tout ca n'utilise
+// de GPS : le "terrain" est une simple auto-declaration (quartier saisi a la main).
 const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 // Liste fermee de quartiers de Liege, chacun associe a un point approximatif sur
-// la carte. Sert de repli quand une personne n'a pas partage sa position GPS en
-// direct (ou l'a refusee) : elle apparait alors approximativement dans son quartier
-// declare plutot qu'a une adresse exacte.
+// la carte. On ne demande jamais de position GPS ni d'adresse : les gens choisissent
+// simplement leur quartier dans cette liste, ce qui suffit a situer une sortie ou un
+// check-in "terrain" sur la carte sans jamais reveler une position exacte.
 const LIEGE_QUARTIERS = [
   { label: 'Centre-ville', lat: 50.6326, lng: 5.5797 },
   { label: 'Outremeuse', lat: 50.6423, lng: 5.5847 },
@@ -505,6 +549,27 @@ function buildMapPoints(activeCheckins, outings) {
       lat: pos.lat,
       lng: pos.lng,
       label: `📅 ${o.outing_date} — ${o.location} (${o.participants.length} participant${o.participants.length !== 1 ? 's' : ''})`
+    });
+  });
+  return mapPoints;
+}
+
+// Construit les points "cellule" affiches sur la carte des cellules de maison :
+// toujours approximatifs (quartier + leger decalage aleatoire), jamais l'adresse
+// exacte du foyer qui accueille — meme logique de confidentialite que pour la
+// carte des missions (voir buildMapPoints ci-dessus).
+function buildCellMapPoints(cells) {
+  const mapPoints = [];
+  cells.forEach((c) => {
+    const q = findQuartier(c.neighborhood);
+    if (!q) return;
+    const pos = jitter(q);
+    mapPoints.push({
+      type: 'cellule',
+      live: false,
+      lat: pos.lat,
+      lng: pos.lng,
+      label: `🏠 ${c.name} — ${c.neighborhood}${c.meeting_day ? ' · ' + c.meeting_day : ''}${c.meeting_time ? ' ' + c.meeting_time : ''}`
     });
   });
   return mapPoints;
@@ -720,13 +785,15 @@ app.get('/ames/export.csv', requireAuth, h(async (req, res) => {
   res.send(csv);
 }));
 
-app.get('/ames/nouvelle', requireAuth, (req, res) => {
-  res.render('soul_form', { soul: null, error: null, duplicate: null });
-});
+app.get('/ames/nouvelle', requireAuth, h(async (req, res) => {
+  const cells = await all('SELECT id, name, neighborhood FROM house_cells WHERE active = 1 ORDER BY neighborhood ASC, name ASC', []);
+  res.render('soul_form', { soul: null, error: null, duplicate: null, cells });
+}));
 
 app.post('/ames', requireAuth, h(async (req, res) => {
-  const { name, phone, city, location, status, notes, met_date, confirm_duplicate } = req.body;
-  if (!name) return res.render('soul_form', { soul: req.body, error: "Le nom est obligatoire.", duplicate: null });
+  const { name, phone, city, location, status, notes, met_date, cell_id, confirm_duplicate } = req.body;
+  const cells = await all('SELECT id, name, neighborhood FROM house_cells WHERE active = 1 ORDER BY neighborhood ASC, name ASC', []);
+  if (!name) return res.render('soul_form', { soul: req.body, error: "Le nom est obligatoire.", duplicate: null, cells });
 
   if (phone && !confirm_duplicate) {
     const key = phoneKey(phone);
@@ -736,21 +803,21 @@ app.post('/ames', requireAuth, h(async (req, res) => {
       `, []);
       const existing = candidates.find((c) => phoneKey(c.phone) === key);
       if (existing) {
-        return res.render('soul_form', { soul: req.body, error: null, duplicate: existing });
+        return res.render('soul_form', { soul: req.body, error: null, duplicate: existing, cells });
       }
     }
   }
 
   await run(
-    `INSERT INTO souls (name, phone, city, location, status, notes, met_date, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, COALESCE(NULLIF(?, ''), date('now')), ?)`,
-    [name.trim(), phone || null, city || null, location || null, status || 'nouvelle_ame', notes || null, met_date, req.session.user.id]
+    `INSERT INTO souls (name, phone, city, location, status, notes, met_date, cell_id, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, COALESCE(NULLIF(?, ''), date('now')), ?, ?)`,
+    [name.trim(), phone || null, city || null, location || null, status || 'nouvelle_ame', notes || null, met_date, cell_id || null, req.session.user.id]
   );
   res.redirect('/ames');
 }));
 
 app.get('/ames/:id', requireAuth, h(async (req, res) => {
-  const soul = await get('SELECT * FROM souls WHERE id = ?', [req.params.id]);
+  const soul = await get('SELECT s.*, hc.name as cell_name FROM souls s LEFT JOIN house_cells hc ON hc.id = s.cell_id WHERE s.id = ?', [req.params.id]);
   if (!soul) return res.status(404).send('Âme introuvable.');
   const messages = await all(`SELECT m.*, u.name as user_name FROM message_log m JOIN users u ON u.id = m.user_id WHERE soul_id = ? ORDER BY sent_at DESC`, [soul.id]);
   const history = await all(`SELECT h.*, u.name as user_name FROM soul_status_history h JOIN users u ON u.id = h.changed_by WHERE soul_id = ? ORDER BY changed_at DESC`, [soul.id]);
@@ -760,15 +827,16 @@ app.get('/ames/:id', requireAuth, h(async (req, res) => {
 app.get('/ames/:id/editer', requireAuth, h(async (req, res) => {
   const soul = await get('SELECT * FROM souls WHERE id = ?', [req.params.id]);
   if (!soul) return res.status(404).send('Âme introuvable.');
-  res.render('soul_form', { soul, error: null, duplicate: null });
+  const cells = await all('SELECT id, name, neighborhood FROM house_cells WHERE active = 1 ORDER BY neighborhood ASC, name ASC', []);
+  res.render('soul_form', { soul, error: null, duplicate: null, cells });
 }));
 
 app.post('/ames/:id', requireAuth, h(async (req, res) => {
-  const { name, phone, city, location, status, notes, met_date } = req.body;
+  const { name, phone, city, location, status, notes, met_date, cell_id } = req.body;
   const before = await get('SELECT status FROM souls WHERE id = ?', [req.params.id]);
   await run(
-    `UPDATE souls SET name=?, phone=?, city=?, location=?, status=?, notes=?, met_date=? WHERE id=?`,
-    [name.trim(), phone || null, city || null, location || null, status, notes || null, met_date, req.params.id]
+    `UPDATE souls SET name=?, phone=?, city=?, location=?, status=?, notes=?, met_date=?, cell_id=? WHERE id=?`,
+    [name.trim(), phone || null, city || null, location || null, status, notes || null, met_date, cell_id || null, req.params.id]
   );
   if (before && before.status !== status) {
     await run(

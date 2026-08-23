@@ -226,6 +226,45 @@ app.get('/dashboard', requireAuth, h(async (req, res) => {
     ORDER BY a.created_at DESC LIMIT 5
   `, []);
 
+  // Les 3 prochaines sorties d'evangelisation programmees (voir "Carte des missions"),
+  // affichees sur le tableau de bord pour que toute l'equipe les voie sans devoir
+  // aller chercher la page dediee.
+  const upcomingOutings = await all(`
+    SELECT o.*, u.name as creator_name,
+      (SELECT COUNT(*) FROM outing_participants op WHERE op.outing_id = o.id) as participant_count,
+      (SELECT COUNT(*) FROM outing_participants op WHERE op.outing_id = o.id AND op.user_id = ?) as i_participate
+    FROM planned_outings o
+    JOIN users u ON u.id = o.created_by
+    WHERE o.outing_date >= date('now')
+    ORDER BY o.outing_date ASC
+    LIMIT 3
+  `, [uid]);
+
+  // Les 3 prochains temps de priere programmes par l'equipe (reunions de priere).
+  const upcomingPrayerMeetings = await all(`
+    SELECT pm.*, l.name as lead_name, c.name as colead_name
+    FROM prayer_meetings pm
+    LEFT JOIN users l ON l.id = pm.lead_id
+    LEFT JOIN users c ON c.id = pm.colead_id
+    WHERE pm.meeting_date >= date('now')
+    ORDER BY pm.meeting_date ASC
+    LIMIT 3
+  `, []);
+
+  // Petit point d'alerte sur les blocs "Prochaine sortie" / "Prochain temps de priere" du
+  // tableau de bord : on regarde si une sortie ou un temps de priere a venir a ete
+  // cree depuis la derniere fois que l'utilisateur a visite la page correspondante
+  // (/missions ou /priere). Le point disparait des qu'il ouvre cette page.
+  const seenRow = await get('SELECT last_seen_outings_at, last_seen_prayer_at FROM users WHERE id = ?', [uid]);
+  const hasNewOutings = (await get(
+    `SELECT COUNT(*) c FROM planned_outings WHERE outing_date >= date('now') AND created_at > ?`,
+    [seenRow.last_seen_outings_at || '1970-01-01']
+  )).c > 0;
+  const hasNewPrayerMeetings = (await get(
+    `SELECT COUNT(*) c FROM prayer_meetings WHERE meeting_date >= date('now') AND created_at > ?`,
+    [seenRow.last_seen_prayer_at || '1970-01-01']
+  )).c > 0;
+
   const prayerSupportCount = (await get(`
     SELECT COUNT(*) c FROM prayer_supports ps
     JOIN prayer_requests p ON p.id = ps.prayer_id
@@ -242,7 +281,8 @@ app.get('/dashboard', requireAuth, h(async (req, res) => {
 
   res.render('dashboard', {
     total, statusCounts, thisWeek, thisMonth, aRecontacter, teamTotal, teamRanking,
-    announcements, prayerSupportCount, goals, GOAL_METRICS, GOAL_PERIODS, recentSouls
+    announcements, upcomingOutings, upcomingPrayerMeetings, hasNewOutings, hasNewPrayerMeetings,
+    prayerSupportCount, goals, GOAL_METRICS, GOAL_PERIODS, recentSouls
   });
 }));
 
@@ -473,6 +513,10 @@ function buildMapPoints(activeCheckins, outings) {
 app.get('/missions', requireAuth, h(async (req, res) => {
   const uid = req.session.user.id;
 
+  // On note que l'utilisateur vient de voir les sorties programmees : ca efface
+  // le petit point d'alerte sur l'onglet "Prochaines sorties" du tableau de bord.
+  await run(`UPDATE users SET last_seen_outings_at = datetime('now') WHERE id = ?`, [uid]);
+
   const activeCheckins = await all(`
     SELECT c.*, u.name as user_name,
       CASE WHEN c.position_updated_at > datetime('now', '-2 minutes') THEN 1 ELSE 0 END as has_live_position
@@ -595,7 +639,10 @@ app.post('/missions/sorties', requireAuth, h(async (req, res) => {
       [outing_date.trim(), location.trim(), validNeighborhood, (notes || '').trim() || null, req.session.user.id]
     );
   }
-  res.redirect('/missions');
+  // On revient a l'ancre "#sorties" (pas juste /missions) pour que la page ne
+  // remonte pas tout en haut sur la carte apres l'action : elle reste positionnee
+  // sur la section des sorties, la ou l'utilisateur se trouvait.
+  res.redirect('/missions#sorties');
 }));
 
 app.post('/missions/sorties/:id/participer', requireAuth, h(async (req, res) => {
@@ -607,7 +654,7 @@ app.post('/missions/sorties/:id/participer', requireAuth, h(async (req, res) => 
   } else {
     await run('INSERT INTO outing_participants (outing_id, user_id) VALUES (?, ?)', [oid, uid]);
   }
-  res.redirect('/missions');
+  res.redirect('/missions#sorties');
 }));
 
 app.post('/missions/sorties/:id/supprimer', requireAuth, h(async (req, res) => {
@@ -615,7 +662,7 @@ app.post('/missions/sorties/:id/supprimer', requireAuth, h(async (req, res) => {
   if (o && o.created_by === req.session.user.id) {
     await run('DELETE FROM planned_outings WHERE id = ?', [o.id]);
   }
-  res.redirect('/missions');
+  res.redirect('/missions#sorties');
 }));
 
 // ---------- Ames ----------
@@ -760,6 +807,11 @@ app.post('/ames/:id/message', requireAuth, h(async (req, res) => {
 // ---------- Espace prière ----------
 app.get('/priere', requireAuth, h(async (req, res) => {
   const uid = req.session.user.id;
+
+  // Idem pour les temps de priere : visiter cette page efface le point d'alerte
+  // correspondant sur le tableau de bord.
+  await run(`UPDATE users SET last_seen_prayer_at = datetime('now') WHERE id = ?`, [uid]);
+
   const requests = await all(`
     SELECT p.*, u.name as user_name,
       (SELECT COUNT(*) FROM prayer_supports ps WHERE ps.prayer_id = p.id) as support_count,

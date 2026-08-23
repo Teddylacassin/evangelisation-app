@@ -45,6 +45,38 @@
 </section>
 
 <div class="two-col">
+  <a href="/missions#sorties" class="panel" style="display:block; padding:14px 18px; text-decoration:none; color:inherit;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <strong>📅 Prochaine sortie<% if (hasNewOutings) { %><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#c0392b; margin-left:6px; vertical-align:middle;"></span><% } %></strong>
+      <span class="muted" style="font-size:0.85rem;">Voir tout →</span>
+    </div>
+    <% if (upcomingOutings.length === 0) { %>
+      <p class="muted" style="margin:6px 0 0;">Aucune sortie programmée pour l'instant.</p>
+    <% } else { %>
+      <p style="margin:6px 0 0;">
+        <%= upcomingOutings[0].outing_date %> · 📍 <%= upcomingOutings[0].location %><% if (upcomingOutings[0].neighborhood) { %> (<%= upcomingOutings[0].neighborhood %>)<% } %>
+        <% if (upcomingOutings.length > 1) { %><span class="muted"> · +<%= upcomingOutings.length - 1 %> autre<%= upcomingOutings.length - 1 > 1 ? 's' : '' %></span><% } %>
+      </p>
+    <% } %>
+  </a>
+
+  <a href="/priere" class="panel" style="display:block; padding:14px 18px; text-decoration:none; color:inherit;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <strong>🙏 Prochain temps de prière<% if (hasNewPrayerMeetings) { %><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#c0392b; margin-left:6px; vertical-align:middle;"></span><% } %></strong>
+      <span class="muted" style="font-size:0.85rem;">Voir tout →</span>
+    </div>
+    <% if (upcomingPrayerMeetings.length === 0) { %>
+      <p class="muted" style="margin:6px 0 0;">Aucun temps de prière programmé pour l'instant.</p>
+    <% } else { %>
+      <p style="margin:6px 0 0;">
+        <%= upcomingPrayerMeetings[0].meeting_date %><% if (upcomingPrayerMeetings[0].topic) { %> · <%= upcomingPrayerMeetings[0].topic %><% } %>
+        <% if (upcomingPrayerMeetings.length > 1) { %><span class="muted"> · +<%= upcomingPrayerMeetings.length - 1 %> autre<%= upcomingPrayerMeetings.length - 1 > 1 ? 's' : '' %></span><% } %>
+      </p>
+    <% } %>
+  </a>
+</div>
+
+<div class="two-col">
   <section class="panel">
     <h2>🎯 Mes objectifs</h2>
     <% if (goals.length === 0) { %>

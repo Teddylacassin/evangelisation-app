@@ -10,6 +10,13 @@
   <div class="stat-label">missionnaire<%= activeCheckins.length !== 1 ? 's' : '' %> actuellement à Liège</div>
 </div>
 
+<% if (myActiveCheckin) { %>
+  <div class="panel" style="background:#fdecea; border:1px solid #c0392b; padding:12px 16px; margin-bottom:20px; display:flex; align-items:center; gap:10px;">
+    <span style="font-size:1.3rem;">📍</span>
+    <span style="color:#8a2e24;">Ta position est actuellement visible <strong>en direct</strong> par toute l'équipe, tant que tu restes déclaré sur le terrain. Clique sur « Je quitte le terrain » pour arrêter le partage.</span>
+  </div>
+<% } %>
+
 <section class="panel">
   <h2>🗺️ Carte en direct</h2>
   <p class="muted">Quand tu es sur le terrain, ta position GPS exacte est partagée en direct avec l'équipe tant que tu restes déclaré — elle disparaît dès que tu quittes le terrain. Les sorties prévues restent affichées par quartier, sans adresse exacte. 🔴 = position en direct · 🟡 = quartier déclaré · 🟢 = sortie prévue.</p>

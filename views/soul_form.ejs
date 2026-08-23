@@ -6,6 +6,13 @@
 
 <% if (error) { %><p class="error"><%= error %></p><% } %>
 
+<% if (typeof duplicate !== 'undefined' && duplicate) { %>
+  <div class="error" style="margin-bottom:14px;">
+    ⚠️ Une âme avec un numéro de téléphone similaire existe déjà : <strong><%= duplicate.name %></strong><% if (duplicate.owner_name) { %> (ajoutée par <%= duplicate.owner_name %>)<% } %> —
+    <a href="/ames/<%= duplicate.id %>">voir sa fiche</a>.
+  </div>
+<% } %>
+
 <form method="POST" action="<%= soul && soul.id ? '/ames/' + soul.id : '/ames' %>" class="stacked-form panel">
   <label>Nom complet *
     <input type="text" name="name" required value="<%= soul ? soul.name || '' : '' %>" autofocus>
@@ -21,6 +28,14 @@
       <input type="text" name="location" placeholder="Marché, gare, rue..." value="<%= soul ? soul.location || '' : '' %>">
     </label>
   </div>
+  <label>Cellule de maison
+    <select name="cell_id">
+      <option value="">— Aucune —</option>
+      <% cells.forEach(function(c) { %>
+        <option value="<%= c.id %>" <%= soul && String(soul.cell_id || '') === String(c.id) ? 'selected' : '' %>><%= c.name %> (<%= c.neighborhood %>)</option>
+      <% }) %>
+    </select>
+  </label>
   <div class="form-row">
     <label>Date de rencontre
       <input type="date" name="met_date" value="<%= soul && soul.met_date ? soul.met_date : new Date().toISOString().slice(0,10) %>">
@@ -36,6 +51,11 @@
   <label>Notes
     <textarea name="notes" rows="4" placeholder="Contexte de la rencontre, besoins exprimés, prière faite ensemble..."><%= soul ? soul.notes || '' : '' %></textarea>
   </label>
+  <% if (typeof duplicate !== 'undefined' && duplicate) { %>
+    <label style="flex-direction:row; align-items:center; gap:8px;">
+      <input type="checkbox" name="confirm_duplicate" value="1" style="width:auto;"> Ajouter quand même cette personne
+    </label>
+  <% } %>
   <button class="btn btn-primary" type="submit"><%= soul && soul.id ? 'Enregistrer les modifications' : 'Ajouter cette âme' %></button>
 </form>
 

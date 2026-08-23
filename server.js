@@ -90,26 +90,34 @@ app.get('/', (req, res) => {
 // ---------- Authentification ----------
 app.get('/inscription', (req, res) => {
   if (req.session.user) return res.redirect('/dashboard');
-  res.render('register', { error: null });
+  res.render('register', { error: null, pending: false });
 });
 
 app.post('/inscription', h(async (req, res) => {
   const { name, email, password, church } = req.body;
   if (!name || !email || !password) {
-    return res.render('register', { error: "Merci de remplir tous les champs obligatoires." });
+    return res.render('register', { error: "Merci de remplir tous les champs obligatoires.", pending: false });
   }
-  const existing = await get('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+  const cleanEmail = email.toLowerCase().trim();
+  const existing = await get('SELECT id FROM users WHERE email = ?', [cleanEmail]);
   if (existing) {
-    return res.render('register', { error: "Un compte existe déjà avec cet email." });
+    return res.render('register', { error: "Un compte existe déjà avec cet email.", pending: false });
   }
   const hash = bcrypt.hashSync(password, 10);
+  // Par securite (donnees personnelles des ames rencontrees), un nouveau compte
+  // reste en attente jusqu'a ce qu'un administrateur le valide depuis Administration
+  // — sauf s'il s'agit directement d'une adresse admin, deja de confiance.
+  const autoApproved = isAdminEmail(cleanEmail) ? 1 : 0;
   const info = await run(
-    'INSERT INTO users (name, email, password_hash, church) VALUES (?, ?, ?, ?)',
-    [name.trim(), email.toLowerCase().trim(), hash, church ? church.trim() : null]
+    'INSERT INTO users (name, email, password_hash, church, approved) VALUES (?, ?, ?, ?, ?)',
+    [name.trim(), cleanEmail, hash, church ? church.trim() : null, autoApproved]
   );
-  const user = await get('SELECT id, name, email, church FROM users WHERE id = ?', [info.lastInsertRowid]);
-  req.session.user = user;
-  res.redirect('/dashboard');
+  if (autoApproved) {
+    const user = await get('SELECT id, name, email, church FROM users WHERE id = ?', [info.lastInsertRowid]);
+    req.session.user = user;
+    return res.redirect('/dashboard');
+  }
+  res.render('register', { error: null, pending: true });
 }));
 
 app.get('/connexion', (req, res) => {
@@ -122,6 +130,9 @@ app.post('/connexion', h(async (req, res) => {
   const row = await get('SELECT * FROM users WHERE email = ?', [(email || '').toLowerCase().trim()]);
   if (!row || !bcrypt.compareSync(password || '', row.password_hash)) {
     return res.render('login', { error: "Email ou mot de passe incorrect." });
+  }
+  if (!row.approved) {
+    return res.render('login', { error: "Ton compte a été créé mais n'a pas encore été validé par un administrateur. Merci de patienter, tu recevras l'accès dès que ce sera fait." });
   }
   req.session.user = { id: row.id, name: row.name, email: row.email, church: row.church };
   res.redirect('/dashboard');
@@ -317,7 +328,25 @@ app.get('/admin', requireAdmin, h(async (req, res) => {
     ORDER BY pm.meeting_date ASC
   `, []);
   const houseCells = await all('SELECT * FROM house_cells ORDER BY active DESC, neighborhood ASC, name ASC', []);
-  res.render('admin', { announcements, zoomLink, zoomLabel, teamMembers, prayerMeetings, houseCells });
+  const cellulePassword = await getSetting('cellule_rapport_password');
+  const pendingUsers = await all('SELECT * FROM users WHERE approved = 0 ORDER BY created_at ASC', []);
+  res.render('admin', { announcements, zoomLink, zoomLabel, teamMembers, prayerMeetings, houseCells, cellulePassword, pendingUsers });
+}));
+
+// Validation manuelle des nouveaux comptes : tant qu'un compte n'est pas valide,
+// il ne peut pas se connecter (voir POST /connexion), ce qui evite que n'importe
+// qui puisse s'inscrire et acceder directement aux donnees des ames.
+app.post('/admin/utilisateurs/:id/valider', requireAdmin, h(async (req, res) => {
+  await run('UPDATE users SET approved = 1 WHERE id = ?', [req.params.id]);
+  res.redirect('/admin');
+}));
+
+app.post('/admin/utilisateurs/:id/refuser', requireAdmin, h(async (req, res) => {
+  const u = await get('SELECT * FROM users WHERE id = ?', [req.params.id]);
+  if (u && !u.approved) {
+    await run('DELETE FROM users WHERE id = ?', [u.id]);
+  }
+  res.redirect('/admin');
 }));
 
 app.post('/admin/annonces', requireAdmin, h(async (req, res) => {
@@ -381,6 +410,15 @@ app.post('/admin/cellules/:id/supprimer', requireAdmin, h(async (req, res) => {
   res.redirect('/admin');
 }));
 
+// Mot de passe partage donnant acces au formulaire de compte-rendu de cellule
+// (voir POST /cellules/:id/rapport) : permet aux pilotes de poster un compte-rendu
+// sans avoir besoin d'un compte sur l'appli, tout en gardant l'acces restreint aux
+// personnes a qui ce mot de passe a ete communique.
+app.post('/admin/cellules-mot-de-passe', requireAdmin, h(async (req, res) => {
+  await setSetting('cellule_rapport_password', (req.body.cellule_rapport_password || '').trim());
+  res.redirect('/admin');
+}));
+
 // Page publique (pas de connexion requise) : accessible via le QR code des cartes
 // d'invitation. On n'affiche jamais d'adresse, seulement le quartier et un moyen
 // de contacter le pilote / co-pilote par WhatsApp, pour preserver l'intimite des
@@ -407,7 +445,11 @@ app.get('/cellules', h(async (req, res) => {
 
   const mapPoints = buildCellMapPoints(cells);
 
-  res.render('cellules', { cells, neighborhoods, selected, mapPoints });
+  res.render('cellules', {
+    cells, neighborhoods, selected, mapPoints,
+    rapportOk: req.query.rapport_ok === '1',
+    rapportErreur: req.query.rapport_erreur === '1'
+  });
 }));
 
 // Un membre de l'equipe indique qu'il fait (ou ne fait plus) partie d'une cellule.
@@ -425,18 +467,39 @@ app.post('/cellules/:id/participer', requireAuth, h(async (req, res) => {
   res.redirect('/cellules' + (back ? '?quartier=' + encodeURIComponent(back) : '') + '#cellule-' + cellId);
 }));
 
-// Un membre de l'equipe (pas forcement le pilote) publie un petit compte-rendu
-// apres une rencontre, visible par toute l'equipe connectee sur /cellules.
-app.post('/cellules/:id/rapport', requireAuth, h(async (req, res) => {
-  const { meeting_date, attendance_count, note, return_quartier } = req.body;
+// Publie un petit compte-rendu apres une rencontre, visible par toute l'equipe
+// connectee sur /cellules. Reserve aux personnes qui connaissent le mot de passe
+// partage (reglable dans Administration) : pas besoin d'un compte sur l'appli, ce
+// qui permet aux pilotes de cellule de l'utiliser meme sans etre inscrits.
+app.post('/cellules/:id/rapport', h(async (req, res) => {
+  const { meeting_date, attendance_count, note, return_quartier, reporter_name, rapport_password } = req.body;
+  const back = (return_quartier || '').trim();
+  const expected = await getSetting('cellule_rapport_password');
+
+  if (!expected || (rapport_password || '') !== expected) {
+    const qs = [];
+    if (back) qs.push('quartier=' + encodeURIComponent(back));
+    qs.push('rapport_erreur=1');
+    return res.redirect('/cellules?' + qs.join('&') + '#cellule-' + req.params.id);
+  }
+
   const count = Number(attendance_count);
   await run(
-    `INSERT INTO cell_reports (cell_id, reported_by, meeting_date, attendance_count, note)
-     VALUES (?, ?, COALESCE(NULLIF(?, ''), date('now')), ?, ?)`,
-    [req.params.id, req.session.user.id, meeting_date, Number.isFinite(count) ? count : null, (note || '').trim() || null]
+    `INSERT INTO cell_reports (cell_id, reported_by, reporter_name, meeting_date, attendance_count, note)
+     VALUES (?, ?, ?, COALESCE(NULLIF(?, ''), date('now')), ?, ?)`,
+    [
+      req.params.id,
+      req.session.user ? req.session.user.id : null,
+      (reporter_name || '').trim() || null,
+      meeting_date,
+      Number.isFinite(count) ? count : null,
+      (note || '').trim() || null
+    ]
   );
-  const back = (return_quartier || '').trim();
-  res.redirect('/cellules' + (back ? '?quartier=' + encodeURIComponent(back) : '') + '#cellule-' + req.params.id);
+  const qs = [];
+  if (back) qs.push('quartier=' + encodeURIComponent(back));
+  qs.push('rapport_ok=1');
+  res.redirect('/cellules?' + qs.join('&') + '#cellule-' + req.params.id);
 }));
 
 // Page interne (connexion requise) qui affiche le QR code des cartes d'invitation

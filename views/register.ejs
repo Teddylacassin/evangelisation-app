@@ -6,24 +6,29 @@
     <h1>Rejoindre l'équipe</h1>
     <p class="auth-subtitle">Crée ton compte pour suivre les âmes que tu gagnes</p>
 
-    <% if (error) { %><p class="error"><%= error %></p><% } %>
+    <% if (typeof pending !== 'undefined' && pending) { %>
+      <p class="auth-subtitle">Ton compte a bien été créé ✅<br>Un administrateur doit encore le valider avant que tu puisses te connecter — cela protège les données des âmes rencontrées par l'équipe. Tu recevras l'accès dès que ce sera fait.</p>
+      <p class="auth-switch"><a href="/connexion">Retour à la connexion</a></p>
+    <% } else { %>
+      <% if (error) { %><p class="error"><%= error %></p><% } %>
 
-    <form method="POST" action="/inscription" class="stacked-form">
-      <label>Nom complet
-        <input type="text" name="name" required autofocus>
-      </label>
-      <label>Email
-        <input type="email" name="email" required>
-      </label>
-      <label>Mot de passe
-        <input type="password" name="password" required minlength="4">
-      </label>
-      <label>Église / groupe (optionnel)
-        <input type="text" name="church">
-      </label>
-      <button class="btn btn-primary" type="submit">Créer mon compte</button>
-    </form>
-    <p class="auth-switch">Déjà un compte ? <a href="/connexion">Se connecter</a></p>
+      <form method="POST" action="/inscription" class="stacked-form">
+        <label>Nom complet
+          <input type="text" name="name" required autofocus>
+        </label>
+        <label>Email
+          <input type="email" name="email" required>
+        </label>
+        <label>Mot de passe
+          <input type="password" name="password" required minlength="4">
+        </label>
+        <label>Église / groupe (optionnel)
+          <input type="text" name="church">
+        </label>
+        <button class="btn btn-primary" type="submit">Créer mon compte</button>
+      </form>
+      <p class="auth-switch">Déjà un compte ? <a href="/connexion">Se connecter</a></p>
+    <% } %>
   </div>
 </div>
 

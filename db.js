@@ -188,15 +188,49 @@ async function initDb() {
     `CREATE TABLE IF NOT EXISTS cell_reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       cell_id INTEGER NOT NULL,
-      reported_by INTEGER NOT NULL,
+      reported_by INTEGER,
+      reporter_name TEXT,
       meeting_date TEXT NOT NULL DEFAULT (date('now')),
       attendance_count INTEGER,
       note TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (cell_id) REFERENCES house_cells(id) ON DELETE CASCADE,
-      FOREIGN KEY (reported_by) REFERENCES users(id) ON DELETE CASCADE
+      FOREIGN KEY (reported_by) REFERENCES users(id) ON DELETE SET NULL
     )`
   ], 'write');
+
+  // Migration : la table cell_reports existante (deployee avant l'ajout de l'acces
+  // par mot de passe partage) exigeait un compte connecte (reported_by NOT NULL).
+  // Comme les comptes-rendus peuvent desormais etre postes sans compte (juste le
+  // mot de passe partage communique aux pilotes), on reconstruit la table pour
+  // rendre la colonne optionnelle et ajouter "reporter_name", en conservant les
+  // lignes existantes. Sans effet si la table est deja a jour ou pas encore creee.
+  try {
+    const info = await db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='cell_reports'");
+    const currentSql = info.rows[0] ? info.rows[0].sql : '';
+    if (currentSql && /reported_by\s+INTEGER\s+NOT\s+NULL/i.test(currentSql)) {
+      await db.batch([
+        'ALTER TABLE cell_reports RENAME TO cell_reports_old',
+        `CREATE TABLE cell_reports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          cell_id INTEGER NOT NULL,
+          reported_by INTEGER,
+          reporter_name TEXT,
+          meeting_date TEXT NOT NULL DEFAULT (date('now')),
+          attendance_count INTEGER,
+          note TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (cell_id) REFERENCES house_cells(id) ON DELETE CASCADE,
+          FOREIGN KEY (reported_by) REFERENCES users(id) ON DELETE SET NULL
+        )`,
+        `INSERT INTO cell_reports (id, cell_id, reported_by, meeting_date, attendance_count, note, created_at)
+         SELECT id, cell_id, reported_by, meeting_date, attendance_count, note, created_at FROM cell_reports_old`,
+        'DROP TABLE cell_reports_old'
+      ], 'write');
+    }
+  } catch (e) {
+    // migration deja effectuee, ou table pas encore creee : rien a faire
+  }
 
   // Ajout des colonnes necessaires a la reinitialisation de mot de passe par email.
   // Comme la table "users" existe deja en production (Turso), on ne peut pas
@@ -212,7 +246,8 @@ async function initDb() {
     "ALTER TABLE field_checkins ADD COLUMN position_updated_at TEXT",
     "ALTER TABLE users ADD COLUMN last_seen_outings_at TEXT",
     "ALTER TABLE users ADD COLUMN last_seen_prayer_at TEXT",
-    "ALTER TABLE souls ADD COLUMN cell_id INTEGER"
+    "ALTER TABLE souls ADD COLUMN cell_id INTEGER",
+    "ALTER TABLE users ADD COLUMN approved INTEGER NOT NULL DEFAULT 1"
   ];
   for (const sql of alterations) {
     try {

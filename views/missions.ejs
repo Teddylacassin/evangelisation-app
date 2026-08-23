@@ -25,18 +25,20 @@
 
 <section class="panel">
   <h2>🔥 Sur le terrain maintenant</h2>
-  <% if (activeCheckins.length === 0) { %>
-    <p class="empty">Personne n'est déclaré sur le terrain pour l'instant.</p>
-  <% } else { %>
-    <ul class="soul-mini-list">
-      <% activeCheckins.forEach(function(c) { %>
-        <li>
-          <span class="status-pill" style="background:var(--gold);">🔥 <%= c.user_name %></span>
-          <span class="muted">— <%= c.neighborhood %></span>
-        </li>
-      <% }) %>
-    </ul>
-  <% } %>
+  <div id="checkins-list">
+    <% if (activeCheckins.length === 0) { %>
+      <p class="empty">Personne n'est déclaré sur le terrain pour l'instant.</p>
+    <% } else { %>
+      <ul class="soul-mini-list">
+        <% activeCheckins.forEach(function(c) { %>
+          <li>
+            <span class="status-pill" style="background:var(--gold);">🔥 <%= c.user_name %></span>
+            <span class="muted">— <%= c.neighborhood %><% if (c.distance_m != null) { %> · à <%= c.distance_m < 1000 ? c.distance_m + ' m' : (c.distance_m/1000).toFixed(1) + ' km' %> de toi<% } %></span>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
 
   <form method="POST" action="/missions/terrain" class="stacked-form" style="margin-top:16px;">
     <% if (myActiveCheckin) { %>
@@ -142,6 +144,33 @@
 
     var markers = L.layerGroup().addTo(map);
     var counterEl = document.getElementById('active-count');
+    var checkinsListEl = document.getElementById('checkins-list');
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    }
+
+    function formatDistance(m) {
+      return m < 1000 ? (m + ' m') : ((m / 1000).toFixed(1) + ' km');
+    }
+
+    function renderCheckins(checkins) {
+      if (!checkinsListEl) return;
+      if (!checkins || checkins.length === 0) {
+        checkinsListEl.innerHTML = '<p class="empty">Personne n\'est déclaré sur le terrain pour l\'instant.</p>';
+        return;
+      }
+      var html = '<ul class="soul-mini-list">';
+      checkins.forEach(function (c) {
+        var extra = c.distance_m != null ? ' · à ' + formatDistance(c.distance_m) + ' de toi' : '';
+        html += '<li><span class="status-pill" style="background:var(--gold);">🔥 ' + escapeHtml(c.user_name) + '</span> ' +
+          '<span class="muted">— ' + escapeHtml(c.neighborhood) + extra + '</span></li>';
+      });
+      html += '</ul>';
+      checkinsListEl.innerHTML = html;
+    }
 
     function colorFor(p) {
       if (p.type === 'sortie') return '#2f6b4f';
@@ -176,6 +205,7 @@
         .then(function (data) {
           drawPoints(data.mapPoints);
           if (counterEl) counterEl.textContent = data.activeCount;
+          renderCheckins(data.checkins);
         })
         .catch(function () {});
     }

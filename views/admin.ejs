@@ -4,6 +4,31 @@
   <h1>📣 Administration — Annonces</h1>
 </div>
 
+<% if (pendingUsers.length > 0) { %>
+<section class="panel" style="border:1px solid #f59e0b;">
+  <h2>⏳ Comptes en attente de validation (<%= pendingUsers.length %>)</h2>
+  <p class="muted">Tant qu'un compte n'est pas validé, la personne ne peut pas se connecter ni voir les données des âmes.</p>
+  <ul class="message-history">
+    <% pendingUsers.forEach(function(u) { %>
+      <li>
+        <div class="message-meta"><%= u.created_at %></div>
+        <div class="message-content">
+          <strong><%= u.name %></strong> — <%= u.email %><% if (u.church) { %> · <%= u.church %><% } %>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <form method="POST" action="/admin/utilisateurs/<%= u.id %>/valider">
+            <button class="btn btn-small btn-active" type="submit">✓ Valider</button>
+          </form>
+          <form method="POST" action="/admin/utilisateurs/<%= u.id %>/refuser" onsubmit="return confirm('Refuser et supprimer cette demande de compte ?');">
+            <button class="btn btn-small btn-danger" type="submit">Refuser</button>
+          </form>
+        </div>
+      </li>
+    <% }) %>
+  </ul>
+</section>
+<% } %>
+
 <section class="panel">
   <h2>Envoyer une annonce à toute l'équipe</h2>
   <p class="muted">Le message apparaîtra en haut du tableau de bord de chaque gagneur d'âme.</p>
@@ -149,6 +174,17 @@
       <% }) %>
     </ul>
   <% } %>
+</section>
+
+<section class="panel">
+  <h2>🔑 Mot de passe des comptes-rendus de cellules</h2>
+  <p class="muted">Un pilote de cellule (même sans compte sur l'appli) peut poster un compte-rendu après une rencontre depuis la page publique <code>/cellules</code>, à condition de connaître ce mot de passe. Communique-le uniquement aux personnes de confiance.</p>
+  <form method="POST" action="/admin/cellules-mot-de-passe" class="stacked-form">
+    <label>Mot de passe
+      <input type="text" name="cellule_rapport_password" value="<%= cellulePassword || '' %>" placeholder="Ex : semeurs2026">
+    </label>
+    <button class="btn btn-primary" type="submit">Enregistrer</button>
+  </form>
 </section>
 
 <section class="panel">

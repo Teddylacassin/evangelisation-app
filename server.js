@@ -34,6 +34,7 @@ app.use(session({
 
 const STATUSES = {
   nouvelle_ame: { label: "Nouvelle âme rencontrée", color: "#f59e0b" },
+  sauvee: { label: "Sauvé(e) 🙌", color: "#ec4899" },
   en_suivi: { label: "En suivi", color: "#3b82f6" },
   affermie: { label: "Affermie dans la foi", color: "#8b5cf6" },
   integree: { label: "Intégrée dans une église", color: "#10b981" },

@@ -4,7 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
-const SQLiteStore = require('connect-sqlite3')(session);
+const MemoryStore = require('memorystore')(session);
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { initDb, get, all, run, VERSES } = require('./db');
@@ -13,11 +13,6 @@ const { sendEmail } = require('./mail');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Le dossier "data" sert uniquement a stocker les sessions de connexion
-// (les donnees de l'app, elles, vivent sur Turso). On le cree s'il n'existe pas.
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
@@ -25,7 +20,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
-  store: new SQLiteStore({ db: 'sessions.db', dir: dataDir }),
+  store: new MemoryStore({ checkPeriod: 1000 * 60 * 60 * 24 }), // nettoie les sessions expirees chaque jour
   secret: process.env.SESSION_SECRET || 'change-moi-en-production-evangelisation',
   resave: false,
   saveUninitialized: false,

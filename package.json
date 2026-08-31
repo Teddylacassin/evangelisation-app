@@ -10,11 +10,11 @@
   "dependencies": {
     "@libsql/client": "^0.17.4",
     "bcryptjs": "^2.4.3",
-    "connect-sqlite3": "^0.9.13",
     "dotenv": "^16.4.5",
     "ejs": "^3.1.10",
     "express": "^4.19.2",
     "express-session": "^1.18.0",
+    "memorystore": "^1.6.8",
     "node-cron": "^3.0.3"
   }
 }
